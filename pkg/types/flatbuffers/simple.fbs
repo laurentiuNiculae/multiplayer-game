@@ -1,0 +1,43 @@
+namespace flatgen.game;
+
+table BunicaEvent {
+    id: string;
+}
+
+table Player {
+    id: int;
+    x: int;
+    y: int;
+    speed: int;
+    moving_left: bool;
+    moving_right: bool;
+    moving_up: bool;
+    moving_down: bool;
+}
+
+table PlayerQuit {
+	id: int;
+}
+
+table PlayerJoined {
+	player: Player;
+}
+
+table PlayerHello {
+	id: int;
+}
+
+table PlayerHelloResponse {
+	id: int;
+}
+
+table PlayerMoved {
+	player: Player;
+}
+
+table Event {
+    kind: string;
+    data: [ubyte];
+}
+
+root_type Event;

@@ -1,3 +1,6 @@
+import * as Game from './flatgen/game.js'
+import * as flatbuffers from './flatbuffers/flatbuffers.js'
+
 const Port = 6969;
 const WorldWidth = 800;
 const WorldHeight = 600;
@@ -34,14 +37,26 @@ function max(a, b) {
     return b
 }
 
+interface Player {
+    Speed: string,
+    X: number,
+    Y: number,
+    MovingLeft: boolean,
+    MovingRight: boolean,
+    MovingUp: boolean,
+    MovingDown: boolean,
+}
+
 (() => {
     const conn = new WebSocket("/websocket")
     let myID = undefined
-    let Players = {}
+    let bunica = false
+    let Players = new Map<Number, Player>()
 
-    let gameCanvas = document.getElementById("canvas")
-    gameCanvas.width = 800
-    gameCanvas.height = 800
+    let gameCanvas = document.getElementById("canvas") as HTMLCanvasElement
+
+    gameCanvas.width = WorldWidth
+    gameCanvas.height = WorldHeight
     let ctx = gameCanvas.getContext("2d")
 
     conn.addEventListener("open", (event) => {
@@ -79,9 +94,10 @@ function max(a, b) {
                     console.log("New Player Quit", `His id = "${message.Id}"`, message)
                     break
                 case isPlayerMoved(message):
-                    console.log("WOWOWOWOWOWO PLAYER MOVEDD")
                     const playerId = message.Player.Id
                     let player = Players[playerId]
+                    player.X = message.Player.X
+                    player.Y = message.Player.Y
                     player.MovingLeft = message.MovingLeft
                     player.MovingRight = message.MovingRight
                     player.MovingUp = message.MovingUp
@@ -105,18 +121,25 @@ function max(a, b) {
         ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
         ctx.fillStyle = 'red'
 
+        
         for (const [id, player] of Object.entries(Players)) {
-            if (player.MovingLeft && player.X-5 >= 0) {
-				player.X = player.X-5
+            let movedDelta = delta * player.Speed
+
+            if (player.MovingLeft && player.X-movedDelta >= 0) {
+                player.X = player.X-movedDelta
+                console.log("movedDelta: ", movedDelta)
 			}
-			if (player.MovingRight && player.X+5 < WorldWidth - 20) {
-				player.X = player.X+5
+			if (player.MovingRight && player.X+movedDelta < WorldWidth - 20) {
+				player.X = player.X+movedDelta
+                console.log("movedDelta: ", movedDelta)
 			}
-			if (player.MovingUp && player.Y-5 >= 0) {
-				player.Y = player.Y-5
+			if (player.MovingUp && player.Y-movedDelta >= 0) {
+				player.Y = player.Y-movedDelta
+                console.log("movedDelta: ", movedDelta)
 			}
-			if (player.MovingDown && player.Y+5 < WorldHeight - 20) {
-				player.Y = player.Y+5
+			if (player.MovingDown && player.Y+movedDelta < WorldHeight - 20) {
+				player.Y = player.Y+movedDelta
+                console.log("movedDelta: ", movedDelta)
 			}
 
             Players[id] = player

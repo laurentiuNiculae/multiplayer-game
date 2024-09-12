@@ -1,0 +1,10 @@
+{
+  "type": "module",
+  "devDependencies": {
+    "typescript": "^5.6.2"
+  },
+  "dependencies": {
+    "flatbuffers": "^24.3.25",
+    "is-even": "^1.0.0"
+  }
+}

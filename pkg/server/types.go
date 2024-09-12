@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"github.com/coder/websocket"
@@ -6,7 +6,8 @@ import (
 
 type Player struct {
 	Id          int
-	X, Y        int
+	X, Y        float64
+	Speed       float64
 	MovingLeft  bool
 	MovingRight bool
 	MovingUp    bool
