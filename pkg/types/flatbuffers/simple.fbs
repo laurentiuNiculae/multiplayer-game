@@ -27,7 +27,7 @@ table PlayerHello {
 	id: int;
 }
 
-table PlayerHelloResponse {
+table PlayerHelloConfirm {
 	id: int;
 }
 

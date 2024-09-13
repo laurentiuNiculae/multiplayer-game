@@ -1,3 +1,5 @@
+import * as Game from './flatgen/game.js';
+import * as flatbuffers from './flatbuffers/flatbuffers.js';
 const Port = 6969;
 const WorldWidth = 800;
 const WorldHeight = 600;
@@ -25,6 +27,27 @@ function max(a, b) {
     }
     return b;
 }
+function rawBlobToFlatEvent(rawEventBlob) {
+    var array = new Uint8Array(rawEventBlob);
+    var buf = new flatbuffers.ByteBuffer(array);
+    return Game.Event.getRootAsEvent(buf);
+}
+function getFlatPlayerHello(array) {
+    let eventDataBuf = new flatbuffers.ByteBuffer(array);
+    return Game.PlayerHello.getRootAsPlayerHello(eventDataBuf);
+}
+function getFlatPlayerJoined(array) {
+    let eventDataBuf = new flatbuffers.ByteBuffer(array);
+    return Game.PlayerJoined.getRootAsPlayerJoined(eventDataBuf);
+}
+function getFlatPlayerQuit(array) {
+    let eventDataBuf = new flatbuffers.ByteBuffer(array);
+    return Game.PlayerQuit.getRootAsPlayerQuit(eventDataBuf);
+}
+function getFlatPlayerMoved(array) {
+    let eventDataBuf = new flatbuffers.ByteBuffer(array);
+    return Game.PlayerMoved.getRootAsPlayerMoved(eventDataBuf);
+}
 (() => {
     const conn = new WebSocket("/websocket");
     let myID = undefined;
@@ -42,44 +65,59 @@ function max(a, b) {
     });
     conn.addEventListener("message", (event) => {
         if (myID === undefined) {
-            const message = JSON.parse(event.data);
-            if (isHello(message)) {
-                myID = message.Id;
-                console.log("We got hello!", `Our id = "${message.Id}"`);
-            }
-            else {
-                console.log("ERROR: Expected hello message");
-            }
+            event.data.arrayBuffer().then((rawEventBlob) => {
+                let flatEvent = rawBlobToFlatEvent(rawEventBlob);
+                let playerHello = getFlatPlayerHello(flatEvent.dataArray());
+                myID = playerHello.id();
+                let builder = new flatbuffers.Builder(256);
+                let helloResponse = Game.PlayerHelloConfirm.createPlayerHelloConfirm(builder, myID);
+                let kind = builder.createString("PlayerHelloConfirm");
+                let eventResponse = Game.Event.createEvent(builder, kind, helloResponse);
+                builder.finish(eventResponse);
+                let responseBytes = builder.asUint8Array();
+                conn.send(responseBytes);
+                console.log("We got hello!", `Our id = "${myID}"`);
+            });
         }
         else {
-            const message = JSON.parse(event.data);
-            switch (true) {
-                case isPlayerJoined(message):
-                    console.log("New Player Joined", `His id = "${message.Player.Id}"`, message);
-                    message.Player.MovingLeft = false;
-                    message.Player.MovingRight = false;
-                    message.Player.MovingUp = false;
-                    message.Player.MovingDown = false;
-                    Players[message.Player.Id] = message.Player;
-                    break;
-                case isPlayerQuit(message):
-                    delete Players[message.Id];
-                    console.log("New Player Quit", `His id = "${message.Id}"`, message);
-                    break;
-                case isPlayerMoved(message):
-                    const playerId = message.Player.Id;
-                    let player = Players[playerId];
-                    player.X = message.Player.X;
-                    player.Y = message.Player.Y;
-                    player.MovingLeft = message.MovingLeft;
-                    player.MovingRight = message.MovingRight;
-                    player.MovingUp = message.MovingUp;
-                    player.MovingDown = message.MovingDown;
-                    Players[playerId] = player;
-                    break;
-                default:
-                    console.log("bogus amogus", message);
-            }
+            event.data.arrayBuffer().then((rawEventBlob) => {
+                let flatEvent = rawBlobToFlatEvent(rawEventBlob);
+                switch (flatEvent.kind()) {
+                    case "PlayerJoined":
+                        let playerJoined = getFlatPlayerJoined(flatEvent.dataArray());
+                        console.log("New Player Joined", `His id = "${playerJoined.player().id()}"`);
+                        Players[playerJoined.player().id()] = {
+                            Id: playerJoined.player().id(),
+                            Speed: playerJoined.player().speed(),
+                            X: playerJoined.player().x(),
+                            Y: playerJoined.player().y(),
+                            MovingLeft: playerJoined.player().movingLeft(),
+                            MovingRight: playerJoined.player().movingRight(),
+                            MovingUp: playerJoined.player().movingUp(),
+                            MovingDown: playerJoined.player().movingDown()
+                        };
+                        break;
+                    case "PlayerQuit":
+                        let playerQuit = getFlatPlayerQuit(flatEvent.dataArray());
+                        delete Players[playerQuit.id()];
+                        console.log("New Player Quit", `His id = "${playerQuit.id()}"`);
+                        break;
+                    case "PlayerMoved":
+                        const playerMoved = getFlatPlayerMoved(flatEvent.dataArray());
+                        const playerId = playerMoved.player().id();
+                        let player = Players[playerId];
+                        player.X = playerMoved.player().x();
+                        player.Y = playerMoved.player().y();
+                        player.MovingLeft = playerMoved.player().movingLeft();
+                        player.MovingRight = playerMoved.player().movingRight();
+                        player.MovingUp = playerMoved.player().movingUp();
+                        player.MovingDown = playerMoved.player().movingDown();
+                        Players[playerId] = player;
+                        break;
+                    default:
+                        console.log("bogus amogus", event.data);
+                }
+            });
         }
     });
     let prevTimestamp = 0;
@@ -93,19 +131,20 @@ function max(a, b) {
             let movedDelta = delta * player.Speed;
             if (player.MovingLeft && player.X - movedDelta >= 0) {
                 player.X = player.X - movedDelta;
-                console.log("movedDelta: ", movedDelta);
+                // console.log("movedDelta: ", movedDelta)
+                console.log("speed: ", player.Speed);
             }
             if (player.MovingRight && player.X + movedDelta < WorldWidth - 20) {
                 player.X = player.X + movedDelta;
-                console.log("movedDelta: ", movedDelta);
+                // console.log("movedDelta: ", movedDelta)
             }
             if (player.MovingUp && player.Y - movedDelta >= 0) {
                 player.Y = player.Y - movedDelta;
-                console.log("movedDelta: ", movedDelta);
+                // console.log("movedDelta: ", movedDelta)
             }
             if (player.MovingDown && player.Y + movedDelta < WorldHeight - 20) {
                 player.Y = player.Y + movedDelta;
-                console.log("movedDelta: ", movedDelta);
+                // console.log("movedDelta: ", movedDelta)
             }
             Players[id] = player;
             ctx.fillRect(player.X, player.Y, 20, 20);
@@ -137,18 +176,18 @@ function max(a, b) {
                     }
                     break;
             }
-            conn.send(JSON.stringify({
-                Kind: "PlayerMoved",
-                Player: {
-                    Id: Players[myID].Id,
-                    X: Players[myID].X,
-                    Y: Players[myID].Y
-                },
-                MovingUp: Players[myID].MovingUp,
-                MovingLeft: Players[myID].MovingLeft,
-                MovingDown: Players[myID].MovingDown,
-                MovingRight: Players[myID].MovingRight
-            }));
+            let builder = new flatbuffers.Builder(256);
+            let player = Players[myID];
+            let flatPlayer = Game.Player.createPlayer(builder, myID, player.X, player.Y, player.Speed, player.MovingLeft, player.MovingRight, player.MovingUp, player.MovingDown);
+            let playerMoved = Game.PlayerMoved.createPlayerMoved(builder, flatPlayer);
+            builder.finish(playerMoved);
+            let playerMovedBytes = builder.asUint8Array();
+            let kind = builder.createString("PlayerMoved");
+            let data = builder.createByteVector(playerMovedBytes);
+            let eventResponse = Game.Event.createEvent(builder, kind, data);
+            builder.finish(eventResponse);
+            let responseBytes = builder.asUint8Array();
+            conn.send(responseBytes);
         }
     });
     window.addEventListener("keyup", (e) => {
@@ -176,18 +215,18 @@ function max(a, b) {
                     }
                     break;
             }
-            conn.send(JSON.stringify({
-                Kind: "PlayerMoved",
-                Player: {
-                    Id: Players[myID].Id,
-                    X: Players[myID].X,
-                    Y: Players[myID].Y
-                },
-                MovingUp: Players[myID].MovingUp,
-                MovingLeft: Players[myID].MovingLeft,
-                MovingDown: Players[myID].MovingDown,
-                MovingRight: Players[myID].MovingRight
-            }));
+            let builder = new flatbuffers.Builder(256);
+            let player = Players[myID];
+            let flatPlayer = Game.Player.createPlayer(builder, myID, player.X, player.Y, player.Speed, player.MovingLeft, player.MovingRight, player.MovingUp, player.MovingDown);
+            let playerMoved = Game.PlayerMoved.createPlayerMoved(builder, flatPlayer);
+            builder.finish(playerMoved);
+            let playerMovedBytes = builder.asUint8Array();
+            let kind = builder.createString("PlayerMoved");
+            let data = builder.createByteVector(playerMovedBytes);
+            let eventResponse = Game.Event.createEvent(builder, kind, data);
+            builder.finish(eventResponse);
+            let responseBytes = builder.asUint8Array();
+            conn.send(responseBytes);
         }
     });
     window.requestAnimationFrame((timestamp) => {
@@ -195,4 +234,3 @@ function max(a, b) {
         window.requestAnimationFrame(frame);
     });
 })();
-export {};

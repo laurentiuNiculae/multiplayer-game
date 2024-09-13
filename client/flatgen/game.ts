@@ -6,7 +6,7 @@ export { BunicaEvent } from './game/bunica-event.js';
 export { Event } from './game/event.js';
 export { Player } from './game/player.js';
 export { PlayerHello } from './game/player-hello.js';
-export { PlayerHelloResponse } from './game/player-hello-response.js';
+export { PlayerHelloConfirm } from './game/player-hello-confirm.js';
 export { PlayerJoined } from './game/player-joined.js';
 export { PlayerMoved } from './game/player-moved.js';
 export { PlayerQuit } from './game/player-quit.js';

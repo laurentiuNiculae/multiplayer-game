@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"test/pkg/log"
+	flatgen "test/pkg/types/flatgen/game"
 
 	"github.com/coder/websocket"
+	flatbuffers "github.com/google/flatbuffers/go"
 )
 
 var ServerFPT = 30
@@ -65,20 +67,23 @@ func (game *GameServer) Start() {
 		defer func() {
 			wcon.CloseNow()
 			game.Players.Delete(playerId)
+			builder := flatbuffers.NewBuilder(128)
 
 			game.EventQueue <- Event{
-				Kind: PlayerQuitKind,
-				Conn: wcon,
-				Data: PlayerQuit{Kind: PlayerQuitKind, Id: playerId},
+				PlayerId: playerId,
+				Kind:     PlayerQuitKind,
+				Conn:     wcon,
+				Data:     flatgen.GetRootAsPlayerQuit(GetFlatPlayerQuit(builder, playerId), 0),
 			}
 
 			game.log.Infof("Player '%v' diconnected", playerId)
 		}()
 
 		game.EventQueue <- Event{
-			Kind: PlayerHelloKind,
-			Conn: wcon,
-			Data: PlayerHello{Kind: PlayerHelloKind, Id: playerId},
+			PlayerId: playerId,
+			Kind:     PlayerHelloKind,
+			Conn:     wcon,
+			Data:     PlayerHello{Kind: PlayerHelloKind, Id: playerId},
 		}
 
 		for {
@@ -87,16 +92,17 @@ func (game *GameServer) Start() {
 				return
 			}
 
-			kind, data, err := getMessageKindAndData(dataBytes)
+			kind, data, err := getMessageKindAndDataFlat(dataBytes)
 			if err != nil {
 				game.log.Errorf("err: %v\n", err)
 				continue
 			}
 
 			game.EventQueue <- Event{
-				Kind: kind,
-				Data: data,
-				Conn: wcon,
+				PlayerId: playerId,
+				Kind:     kind,
+				Data:     data,
+				Conn:     wcon,
 			}
 		}
 	})
@@ -121,66 +127,88 @@ func (game *GameServer) Tick() {
 	<-ticker.C
 
 	for range ticker.C {
-		for i := 0; i < len(game.EventQueue); i++ {
+		// start := time.Now()
+		for range len(game.EventQueue) {
+			ctx := context.Background()
 			event := <-game.EventQueue
 
 			switch event.Kind {
 			case PlayerHelloKind:
-				ctx := context.Background()
 				playerHello := event.Data.(PlayerHello)
-				newPlayerConn := event.Conn
 
-				newPlayer := Player{
-					Id:    playerHello.Id,
-					Speed: rand.Float64()*800 + 200,
-					X:     rand.Float64() * float64(WorldWidth),
-					Y:     rand.Float64() * float64(WorldHeight),
+				newPlayer := PlayerWithSocket{
+					Conn: event.Conn,
+					Player: Player{
+						Id:    playerHello.Id,
+						Speed: rand.Float64()*800 + 200,
+						X:     rand.Float64() * float64(WorldWidth),
+						Y:     rand.Float64() * float64(WorldHeight),
+					},
 				}
 
-				// registerPlayer
-				game.Players.Set(newPlayer.Id, PlayerWithSocket{
-					Conn:   event.Conn,
-					Player: newPlayer,
-				})
+				game.Players.Set(newPlayer.Id, newPlayer)
 
 				game.log.Infof("Player connected: '%v'", playerHello.Id)
 
-				err := newPlayerConn.Write(ctx, websocket.MessageText, Json(playerHello))
+				builder := flatbuffers.NewBuilder(1024)
+
+				eventData := GetFlatPlayerHello(builder, newPlayer.Player)
+				eventBytes := GetFlatEvent(builder, PlayerHelloKind, eventData)
+
+				err := newPlayer.Conn.Write(ctx, websocket.MessageBinary, eventBytes)
 				if err != nil {
 					game.log.Errorf("err: %s\n", err.Error())
 				}
+			case PlayerHelloConfirmKind:
+				helloResponse := event.Data.(*flatgen.PlayerHelloConfirm)
+
+				if helloResponse.Id() == int32(event.PlayerId) {
+					fmt.Println("HELLO CONFIRMED BY PLAYER")
+				}
+
+				builder := flatbuffers.NewBuilder(1024)
+				newPlayer, _ := game.Players.Get(event.PlayerId)
+
+				flatNewPlayerJoined := GetFlatPlayerJoined(builder, newPlayer.Player)
+				flatNewPlayerJoinedEvent := GetFlatEvent(builder, PlayerJoinedKind, flatNewPlayerJoined)
 
 				for _, otherPlayer := range game.Players.All() {
-					otherPlayer.Conn.Write(ctx, websocket.MessageText, Json(PlayerJoined{
-						Kind:   PlayerJoinedKind,
-						Player: newPlayer,
-					}))
+					otherPlayer.Conn.Write(ctx, websocket.MessageBinary, flatNewPlayerJoinedEvent)
 
+					flatOtherPlayerJoined := GetFlatPlayerJoined(builder, otherPlayer.Player)
+					flatOtherPlayerJoinedEvent := GetFlatEvent(builder, PlayerJoinedKind, flatOtherPlayerJoined)
 					if otherPlayer.Id != newPlayer.Id {
-						newPlayerConn.Write(ctx, websocket.MessageText, Json(PlayerJoined{
-							Kind:   PlayerJoinedKind,
-							Player: otherPlayer.Player,
-						}))
+						newPlayer.Conn.Write(ctx, websocket.MessageBinary, flatOtherPlayerJoinedEvent)
 					}
 				}
 			case PlayerQuitKind:
-				playerQuit := event.Data.(PlayerQuit)
+				playerQuit := event.Data.(*flatgen.PlayerQuit)
 
-				game.NotifyAll(Json(playerQuit))
+				if playerQuit.Id() != int32(event.PlayerId) {
+					event.Conn.CloseNow()
+					game.log.Errorf("player '%s' tried to cheat", event.PlayerId)
+				}
+
+				response := GetFlatEvent(flatbuffers.NewBuilder(256), PlayerMovedKind,
+					playerQuit.Table().Bytes)
+
+				game.NotifyAll(response)
 			case PlayerMovedKind:
-				playerMoved := event.Data.(PlayerMoved)
+				playerMoved := event.Data.(*flatgen.PlayerMoved)
+				newPlayerInfo := playerMoved.Player(nil)
 
-				player, ok := game.Players.Get(playerMoved.Player.Id)
-				_ = ok // TODO
-				player.MovingLeft = playerMoved.MovingLeft
-				player.MovingRight = playerMoved.MovingRight
-				player.MovingUp = playerMoved.MovingUp
-				player.MovingDown = playerMoved.MovingDown
+				player, _ := game.Players.Get(int(newPlayerInfo.Id())) // TODO _
+				player.MovingLeft = newPlayerInfo.MovingLeft()
+				player.MovingRight = newPlayerInfo.MovingRight()
+				player.MovingUp = newPlayerInfo.MovingUp()
+				player.MovingDown = newPlayerInfo.MovingDown()
 
-				game.Players.Set(playerMoved.Player.Id, player)
-				// collect this information and only then update the clients
+				game.Players.Set(int(newPlayerInfo.Id()), player)
 
-				game.NotifyAll(Json(playerMoved))
+				response := GetFlatEvent(flatbuffers.NewBuilder(256), PlayerMovedKind,
+					playerMoved.Table().Bytes)
+
+				game.NotifyAll(response)
 			}
 		}
 
@@ -205,52 +233,150 @@ func (game *GameServer) Tick() {
 			game.Players.Set(i, player)
 		}
 
+		// game.log.Debugf("%06f", time.Since(start).Seconds())
 		// game.log.Info(delta.String())
 	}
 }
 
-func getMessageKindAndData(data []byte) (string, any, error) {
-	kindHolder := KindHolder{}
+func GetFlatPlayerHello(builder *flatbuffers.Builder, newPlayer Player) []byte {
+	flatgen.PlayerHelloStart(builder)
+	flatgen.PlayerHelloAddId(builder, int32(newPlayer.Id))
+	flatgen.FinishPlayerHelloBuffer(builder, flatgen.PlayerHelloEnd(builder))
 
-	if err := json.Unmarshal(data, &kindHolder); err != nil {
-		return "", nil, err
-	}
+	return builder.FinishedBytes()
+}
 
-	switch kindHolder.Kind {
-	case PlayerQuitKind:
-		var playerQuit PlayerQuit
+func GetFlatPlayerQuit(builder *flatbuffers.Builder, playerId int) []byte {
+	flatgen.PlayerQuitStart(builder)
+	flatgen.PlayerQuitAddId(builder, int32(playerId))
+	flatgen.FinishPlayerQuitBuffer(builder, flatgen.PlayerQuitEnd(builder))
 
-		if err := json.Unmarshal(data, &playerQuit); err != nil {
-			return "", nil, err
+	return builder.FinishedBytes()
+}
+
+func GetFlatPlayerJoined(builder *flatbuffers.Builder, newPlayer Player) []byte {
+	flatPlayer := GetFlatPlayer(builder, newPlayer)
+
+	flatgen.PlayerJoinedStart(builder)
+	flatgen.PlayerJoinedAddPlayer(builder, flatPlayer)
+	flatgen.FinishPlayerJoinedBuffer(builder, flatgen.PlayerJoinedEnd(builder))
+
+	return builder.FinishedBytes()
+}
+
+func GetFlatPlayer(builder *flatbuffers.Builder, newPlayer Player) flatbuffers.UOffsetT {
+	flatgen.PlayerStart(builder)
+	flatgen.PlayerAddId(builder, int32(newPlayer.Id))
+	flatgen.PlayerAddX(builder, int32(newPlayer.X))
+	flatgen.PlayerAddY(builder, int32(newPlayer.Y))
+	flatgen.PlayerAddSpeed(builder, int32(newPlayer.Speed))
+	flatgen.PlayerAddMovingDown(builder, newPlayer.MovingDown)
+	flatgen.PlayerAddMovingLeft(builder, newPlayer.MovingLeft)
+	flatgen.PlayerAddMovingRight(builder, newPlayer.MovingRight)
+	flatgen.PlayerAddMovingUp(builder, newPlayer.MovingUp)
+
+	return flatgen.PlayerEnd(builder)
+}
+
+// func GetTestEvent(builder *flatbuffers.Builder) []byte {
+// 	flatId := builder.CreateString("BUNICA_ID")
+
+// 	flatgen.BunicaEventStart(builder)
+// 	flatgen.BunicaEventAddId(builder, flatId)
+// 	builder.Finish(flatgen.BunicaEventEnd(builder))
+// 	return builder.FinishedBytes()
+// }
+
+func GetFlatEvent(builder *flatbuffers.Builder, kind string, bytes []byte) []byte {
+	flatKind := builder.CreateByteString([]byte(kind))
+	flatBytes := builder.CreateByteVector(bytes)
+
+	flatgen.EventStart(builder)
+	flatgen.EventAddKind(builder, flatKind)
+	flatgen.EventAddData(builder, flatBytes)
+	builder.Finish(flatgen.EventEnd(builder))
+
+	return builder.FinishedBytes()
+}
+
+// func getMessageKindAndData(data []byte) (string, any, error) {
+// 	kindHolder := KindHolder{}
+
+// 	if err := json.Unmarshal(data, &kindHolder); err != nil {
+// 		return "", nil, err
+// 	}
+
+// 	switch kindHolder.Kind {
+// 	case PlayerQuitKind:
+// 		var playerQuit PlayerQuit
+
+// 		if err := json.Unmarshal(data, &playerQuit); err != nil {
+// 			return "", nil, err
+// 		}
+
+// 		return kindHolder.Kind, playerQuit, nil
+// 	case PlayerHelloKind:
+// 		var playerHello PlayerHello
+
+// 		if err := json.Unmarshal(data, &playerHello); err != nil {
+// 			return "", nil, err
+// 		}
+
+// 		return kindHolder.Kind, playerHello, nil
+// 	case PlayerJoinedKind:
+// 		return PlayerJoinedKind, PlayerJoined{}, fmt.Errorf("server doesn't accept playerJoined messages")
+// 	case PlayerMovedKind:
+// 		var playerMoved PlayerMoved
+
+// 		if err := json.Unmarshal(data, &playerMoved); err != nil {
+// 			return "", nil, err
+// 		}
+
+// 		return PlayerMovedKind, playerMoved, nil
+// 	default:
+// 		return "", nil, fmt.Errorf("ERROR: bogus-amogus kind '%s'", kindHolder.Kind)
+// 	}
+// }
+
+func getMessageKindAndDataFlat(data []byte) (eventKind string, eventData any, err error) {
+	flatEvent := flatgen.GetRootAsEvent(data, 0)
+	eventKind = string(flatEvent.Kind())
+
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("was panic, returned panic value '%v'", r)
 		}
+	}()
 
-		return kindHolder.Kind, playerQuit, nil
+	switch eventKind {
 	case PlayerHelloKind:
-		var playerHello PlayerHello
+		flatPlayerHello := flatgen.GetRootAsPlayerHello(flatEvent.DataBytes(), 0)
 
-		if err := json.Unmarshal(data, &playerHello); err != nil {
-			return "", nil, err
-		}
+		return eventKind, flatPlayerHello, nil
+	case PlayerHelloConfirmKind:
+		flatPlayerHelloConfirm := flatgen.GetRootAsPlayerHelloConfirm(flatEvent.DataBytes(), 0)
 
-		return kindHolder.Kind, playerHello, nil
+		return eventKind, flatPlayerHelloConfirm, nil
+	case PlayerQuitKind:
+		flatPlayerQuit := flatgen.GetRootAsPlayerQuit(flatEvent.DataBytes(), 0)
+
+		return eventKind, flatPlayerQuit, nil
 	case PlayerJoinedKind:
-		return PlayerJoinedKind, PlayerJoined{}, fmt.Errorf("server doesn't accept playerJoined messages")
+		flatPlayerJoined := flatgen.GetRootAsPlayerJoined(flatEvent.DataBytes(), 0)
+
+		return eventKind, flatPlayerJoined, nil
 	case PlayerMovedKind:
-		var playerMoved PlayerMoved
+		flatPlayerMoved := flatgen.GetRootAsPlayerMoved(flatEvent.DataBytes(), 0)
 
-		if err := json.Unmarshal(data, &playerMoved); err != nil {
-			return "", nil, err
-		}
-
-		return PlayerMovedKind, playerMoved, nil
+		return eventKind, flatPlayerMoved, nil
 	default:
-		return "", nil, fmt.Errorf("ERROR: bogus-amogus kind '%s'", kindHolder.Kind)
+		return "", nil, fmt.Errorf("ERROR: bogus-amogus kind '%s'", string(flatEvent.Kind()))
 	}
 }
 
 func (game *GameServer) NotifyAll(msg []byte) {
 	for _, player := range game.Players.All() {
-		err := player.Conn.Write(context.Background(), websocket.MessageText, msg)
+		err := player.Conn.Write(context.Background(), websocket.MessageBinary, msg)
 		if err != nil {
 			continue
 		}
@@ -260,7 +386,7 @@ func (game *GameServer) NotifyAll(msg []byte) {
 func (game *GameServer) NotifyAllElse(msg []byte, except ...int) {
 	for _, player := range game.Players.All() {
 		if !slices.Contains(except, player.Id) {
-			err := player.Conn.Write(context.Background(), websocket.MessageText, msg)
+			err := player.Conn.Write(context.Background(), websocket.MessageBinary, msg)
 			if err != nil {
 				continue
 			}
