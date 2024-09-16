@@ -16,6 +16,10 @@ import (
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 
+var ServerFPT = 30
+var WorldWidth = float64(800 * 2)
+var WorldHeight = float64(600 * 2)
+
 func GetMoveUpEvent(builder *flatbuffers.Builder, player Player) *flatgen.Event {
 	player.MovingUp = true
 	player.MovingDown = false
@@ -57,14 +61,15 @@ func GetMoveRightEvent(builder *flatbuffers.Builder, player Player) *flatgen.Eve
 	return utils.NewFlatEvent(builder, PlayerMovedKind, playerMovedBytes)
 }
 
-var ServerFPT = 30
-var WorldWidth = float64(800 * 2)
-var WorldHeight = float64(600 * 2)
-
-func GameLoop(ctx context.Context, conn *websocket.Conn, playerUpdateChan <-chan Player) {
+func GameLoop(ctx context.Context, conn *websocket.Conn, playerUpdateChan <-chan Player, Id int) {
+	defer func() {
+		for len(playerUpdateChan) > 0 {
+			<-playerUpdateChan
+		}
+	}()
 	myPlayer := <-playerUpdateChan
 
-	moveTicker := time.NewTicker(600 * time.Millisecond)
+	moveTicker := time.NewTicker(1000 * time.Millisecond)
 	moveCount := 0
 
 	ticker := time.NewTicker(1 * time.Second / time.Duration(ServerFPT))
@@ -76,8 +81,6 @@ func GameLoop(ctx context.Context, conn *websocket.Conn, playerUpdateChan <-chan
 		select {
 		case <-ticker.C:
 			select {
-			case <-ctx.Done():
-				return
 			case player := <-playerUpdateChan:
 				myPlayer = player
 			default:
@@ -107,33 +110,40 @@ func GameLoop(ctx context.Context, conn *websocket.Conn, playerUpdateChan <-chan
 			case 0:
 				err := conn.Write(ctx, websocket.MessageBinary, GetMoveUpEvent(builder, myPlayer).Table().Bytes)
 				if err != nil {
-					fmt.Printf("error: %s", err.Error())
+					// fmt.Printf("error: %s\n", err.Error())
+					return
 				}
 			case 1:
 				err := conn.Write(ctx, websocket.MessageBinary, GetMoveRightEvent(builder, myPlayer).Table().Bytes)
 				if err != nil {
-					fmt.Printf("error: %s", err.Error())
+					// fmt.Printf("error: %s\n", err.Error())
+					return
 				}
 			case 2:
 				err := conn.Write(ctx, websocket.MessageBinary, GetMoveDownEvent(builder, myPlayer).Table().Bytes)
 				if err != nil {
-					fmt.Printf("error: %s", err.Error())
+					// fmt.Printf("error: %s\n", err.Error())
+					return
 				}
 			case 3:
 				err := conn.Write(ctx, websocket.MessageBinary, GetMoveLeftEvent(builder, myPlayer).Table().Bytes)
 				if err != nil {
-					fmt.Printf("error: %s", err.Error())
+					// fmt.Printf("error: %s\n", err.Error())
+					return
 				}
 			}
 
 			moveCount = (moveCount + 1) % 4
+		case <-ctx.Done():
+			return
 		}
+
 	}
 }
 
 func RunBot(ctx context.Context, wg *sync.WaitGroup, Id int) {
 	defer func() {
-		fmt.Printf("Bot%v shutting down. ZzzZzz\n", Id)
+		fmt.Printf("Finishing Bot %v\n", Id)
 		wg.Done()
 	}()
 
@@ -148,85 +158,96 @@ func RunBot(ctx context.Context, wg *sync.WaitGroup, Id int) {
 
 	builder := flatbuffers.NewBuilder(256)
 
-	{
-		_, bytes, err := conn.Read(ctx)
+	_, bytes, err := conn.Read(ctx)
+	if err != nil {
+		fmt.Printf("Bot%v error: %s\n", Id, err)
+		return
+	}
+
+	_, data, err := utils.ParseEventBytes(bytes)
+	if err != nil {
+		fmt.Printf("Bot%v error: %s\n", Id, err)
+		return
+	}
+	playerHello := data.(*flatgen.PlayerHello)
+
+	myId = int(playerHello.Id())
+	fmt.Printf("Bot%v Got Id: '%v'\n", Id, myId)
+
+	// Confirm the hello message
+	playerHelloConfirm := utils.NewFlatPlayerHelloConfirm(builder, myId)
+	helloConfirmEvent := utils.NewFlatEvent(builder, PlayerHelloConfirmKind, playerHelloConfirm.Table().Bytes)
+
+	err = conn.Write(ctx, websocket.MessageBinary, helloConfirmEvent.Table().Bytes)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	go GameLoop(ctx, conn, playerUpdateChan, Id)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		_, dataBytes, err := conn.Read(ctx)
 		if err != nil {
-			fmt.Printf("Bot%v error: %s\n", Id, err)
+			fmt.Printf("Bot%v stop at reading: %s\n", Id, err)
+			return
 		}
 
-		_, data, err := utils.ParseEventBytes(bytes)
+		kind, data, err := utils.ParseEventBytes(dataBytes)
 		if err != nil {
-			fmt.Printf("Bot%v error: %s\n", Id, err)
-		}
-		playerHello := data.(*flatgen.PlayerHello)
-
-		myId = int(playerHello.Id())
-		fmt.Printf("Bot%v Got Id: '%v'\n", Id, myId)
-
-		// Confirm the hello message
-		{
-			playerHelloConfirm := utils.NewFlatPlayerHelloConfirm(builder, myId)
-			helloConfirmEvent := utils.NewFlatEvent(builder, PlayerHelloConfirmKind, playerHelloConfirm.Table().Bytes)
-
-			err := conn.Write(ctx, websocket.MessageBinary, helloConfirmEvent.Table().Bytes)
-			if err != nil {
-				fmt.Println(err)
-			}
+			fmt.Printf("Bot%v stop at parsing: %s\n", Id, err)
+			continue
 		}
 
-		go GameLoop(ctx, conn, playerUpdateChan)
+		// fmt.Printf("Bot%v received KIND: '%v' SIZE: '%v'\n", Id, kind, len(dataBytes))
 
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
+		if kind == PlayerJoinedKind {
+			playerJoined := data.(*flatgen.PlayerJoined)
 
-			_, dataBytes, err := conn.Read(ctx)
-			if err != nil {
-				fmt.Printf("Bot%v error: %s\n", Id, err)
-				return
-			}
-
-			kind, data, err := utils.ParseEventBytes(dataBytes)
-			if err != nil {
-				fmt.Printf("Bot%v error: %s\n", Id, err)
-				continue
-			}
-
-			if kind == PlayerJoinedKind {
-				playerJoined := data.(*flatgen.PlayerJoined)
-				player := &flatgen.Player{}
-				if playerJoined.Player(player).Id() == int32(myId) {
-					playerUpdateChan <- Player{
-						Id:    int(player.Id()),
-						X:     float64(player.X()),
-						Y:     float64(player.Y()),
-						Speed: float64(player.Speed()),
-					}
-
-					fmt.Printf("Bot%v Confirmed Join: \n", Id)
+			player := &flatgen.Player{}
+			if playerJoined.Player(player).Id() == int32(myId) {
+				select {
+				case playerUpdateChan <- Player{
+					Id:    int(player.Id()),
+					X:     float64(player.X()),
+					Y:     float64(player.Y()),
+					Speed: float64(player.Speed()),
+				}:
+				case <-ctx.Done():
+					return
 				}
 
-			} else if kind == PlayerMovedKind {
-				playerMoved := data.(*flatgen.PlayerMoved)
-				player := &flatgen.Player{}
-				if playerMoved.Player(player).Id() == int32(myId) {
-					playerUpdateChan <- Player{
-						Id:    int(player.Id()),
-						X:     float64(player.X()),
-						Y:     float64(player.Y()),
-						Speed: float64(player.Speed()),
-					}
+				fmt.Printf("Bot%v Confirmed Join: \n", Id)
+			}
+
+		} else if kind == PlayerMovedKind {
+			playerMoved := data.(*flatgen.PlayerMoved)
+			player := &flatgen.Player{}
+			if playerMoved.Player(player).Id() == int32(myId) {
+				select {
+				case playerUpdateChan <- Player{
+					Id:    int(player.Id()),
+					X:     float64(player.X()),
+					Y:     float64(player.Y()),
+					Speed: float64(player.Speed()),
+				}:
+				case <-ctx.Done():
+					return
 				}
+
 			}
 		}
 	}
 }
 
 func main() {
-	NumBots := 7
+	NumBots := 5
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -235,13 +256,12 @@ func main() {
 	wg.Add(NumBots)
 
 	for ID := range NumBots {
-		time.Sleep(time.Millisecond * 500)
+		time.Sleep(time.Millisecond * 50)
 		go RunBot(ctx, &wg, ID)
 	}
 
 	<-ctx.Done()
 
 	fmt.Println("Finishing execution")
-
 	wg.Wait()
 }

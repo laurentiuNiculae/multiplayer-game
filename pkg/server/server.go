@@ -2,12 +2,12 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"os"
 	"slices"
+	"sort"
 	"time"
 
 	"test/pkg/log"
@@ -67,8 +67,6 @@ func (game *GameServer) Start() {
 		playerId := game.IdGenerator.NewId()
 
 		defer func() {
-			wcon.CloseNow()
-			game.Players.Delete(playerId)
 			builder := flatbuffers.NewBuilder(128)
 
 			game.EventQueue <- Event{
@@ -123,13 +121,18 @@ func (game *GameServer) Start() {
 }
 
 func (game *GameServer) Tick() {
+	WaitServerIsReady(HttpAddress)
+
+	tickTimeArr := make([]float64, 30)
+	timeI := 0
+
 	ticker := time.NewTicker(1 * time.Second / time.Duration(ServerFPT))
 	previousTime, delta := time.Now(), time.Duration(0)
 
 	<-ticker.C
 
 	for range ticker.C {
-		// start := time.Now()
+		start := time.Now()
 		for range len(game.EventQueue) {
 			ctx := context.Background()
 			event := <-game.EventQueue
@@ -152,7 +155,7 @@ func (game *GameServer) Tick() {
 
 				game.log.Infof("Player connected: '%v'", playerHello.Id)
 
-				builder := flatbuffers.NewBuilder(1024)
+				builder := flatbuffers.NewBuilder(256)
 
 				eventData := GetFlatPlayerHello(builder, newPlayer.Player)
 				eventBytes := GetFlatEvent(builder, PlayerHelloKind, eventData)
@@ -170,7 +173,9 @@ func (game *GameServer) Tick() {
 					game.log.Debugf("player ID doesn't match expected:'%d', given:'%d'", event.PlayerId, helloResponse.Id())
 				}
 
-				builder := flatbuffers.NewBuilder(1024)
+				builder := flatbuffers.NewBuilder(256)
+				builder2 := flatbuffers.NewBuilder(256)
+
 				newPlayer, _ := game.Players.Get(event.PlayerId)
 
 				flatNewPlayerJoined := GetFlatPlayerJoined(builder, newPlayer.Player)
@@ -179,11 +184,12 @@ func (game *GameServer) Tick() {
 				for _, otherPlayer := range game.Players.All() {
 					otherPlayer.Conn.Write(ctx, websocket.MessageBinary, flatNewPlayerJoinedEvent)
 
-					flatOtherPlayerJoined := GetFlatPlayerJoined(builder, otherPlayer.Player)
-					flatOtherPlayerJoinedEvent := GetFlatEvent(builder, PlayerJoinedKind, flatOtherPlayerJoined)
+					flatOtherPlayerJoined := GetFlatPlayerJoined(builder2, otherPlayer.Player)
+					flatOtherPlayerJoinedEvent := GetFlatEvent(builder2, PlayerJoinedKind, flatOtherPlayerJoined)
 					if otherPlayer.Id != newPlayer.Id {
 						newPlayer.Conn.Write(ctx, websocket.MessageBinary, flatOtherPlayerJoinedEvent)
 					}
+					builder2.Reset()
 				}
 			case PlayerQuitKind:
 				playerQuit := event.Data.(*flatgen.PlayerQuit)
@@ -197,6 +203,7 @@ func (game *GameServer) Tick() {
 					playerQuit.Table().Bytes)
 
 				game.NotifyAll(response)
+				game.Players.Delete(event.PlayerId)
 			case PlayerMovedKind:
 				playerMoved := event.Data.(*flatgen.PlayerMoved)
 				newPlayerInfo := playerMoved.Player(nil)
@@ -245,8 +252,18 @@ func (game *GameServer) Tick() {
 			game.Players.Set(i, player)
 		}
 
-		// game.log.Debugf("%06f", time.Since(start).Seconds())
-		// game.log.Info(delta.String())
+		if timeI == 29 {
+			sort.Slice(tickTimeArr, func(i, j int) bool {
+				return tickTimeArr[i] < tickTimeArr[j]
+			})
+
+			game.log.Debugf("%06f", tickTimeArr[30/2])
+
+			timeI = 0
+		}
+
+		tickTimeArr[timeI] = time.Since(start).Seconds()
+		timeI++
 	}
 }
 
@@ -290,15 +307,6 @@ func GetFlatPlayer(builder *flatbuffers.Builder, newPlayer Player) flatbuffers.U
 	return flatgen.PlayerEnd(builder)
 }
 
-// func GetTestEvent(builder *flatbuffers.Builder) []byte {
-// 	flatId := builder.CreateString("BUNICA_ID")
-
-// 	flatgen.BunicaEventStart(builder)
-// 	flatgen.BunicaEventAddId(builder, flatId)
-// 	builder.Finish(flatgen.BunicaEventEnd(builder))
-// 	return builder.FinishedBytes()
-// }
-
 func GetFlatEvent(builder *flatbuffers.Builder, kind string, bytes []byte) []byte {
 	flatKind := builder.CreateByteString([]byte(kind))
 	flatBytes := builder.CreateByteVector(bytes)
@@ -311,52 +319,7 @@ func GetFlatEvent(builder *flatbuffers.Builder, kind string, bytes []byte) []byt
 	return builder.FinishedBytes()
 }
 
-// func getMessageKindAndData(data []byte) (string, any, error) {
-// 	kindHolder := KindHolder{}
-
-// 	if err := json.Unmarshal(data, &kindHolder); err != nil {
-// 		return "", nil, err
-// 	}
-
-// 	switch kindHolder.Kind {
-// 	case PlayerQuitKind:
-// 		var playerQuit PlayerQuit
-
-// 		if err := json.Unmarshal(data, &playerQuit); err != nil {
-// 			return "", nil, err
-// 		}
-
-// 		return kindHolder.Kind, playerQuit, nil
-// 	case PlayerHelloKind:
-// 		var playerHello PlayerHello
-
-// 		if err := json.Unmarshal(data, &playerHello); err != nil {
-// 			return "", nil, err
-// 		}
-
-// 		return kindHolder.Kind, playerHello, nil
-// 	case PlayerJoinedKind:
-// 		return PlayerJoinedKind, PlayerJoined{}, fmt.Errorf("server doesn't accept playerJoined messages")
-// 	case PlayerMovedKind:
-// 		var playerMoved PlayerMoved
-
-// 		if err := json.Unmarshal(data, &playerMoved); err != nil {
-// 			return "", nil, err
-// 		}
-
-// 		return PlayerMovedKind, playerMoved, nil
-// 	default:
-// 		return "", nil, fmt.Errorf("ERROR: bogus-amogus kind '%s'", kindHolder.Kind)
-// 	}
-// }
-
 func (game *GameServer) NotifyAll(msg []byte) {
-	defer func() {
-		if r := recover(); r != nil {
-			return
-		}
-	}()
-
 	for _, player := range game.Players.All() {
 		err := player.Conn.Write(context.Background(), websocket.MessageBinary, msg)
 		if err != nil {
@@ -374,15 +337,6 @@ func (game *GameServer) NotifyAllElse(msg []byte, except ...int) {
 			}
 		}
 	}
-}
-
-func Json(x any) []byte {
-	bytes, err := json.Marshal(x)
-	if err != nil {
-		panic(err)
-	}
-
-	return bytes
 }
 
 func WaitServerIsReady(url string) {

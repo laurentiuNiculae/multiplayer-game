@@ -47,7 +47,7 @@ type ErrorWriter struct {
 
 func (dw ErrorWriter) Write(p []byte) (n int, err error) {
 	p = faintFilePath(p)
-	str := append([]byte(red("┏")), p...)
+	str := append([]byte(red("┏ ")), p...)
 
 	return dw.out.Write(str)
 }
@@ -58,7 +58,7 @@ type DebugWriter struct {
 
 func (dw DebugWriter) Write(p []byte) (n int, err error) {
 	p = faintFilePath(p)
-	str := append([]byte(brue("┏")), p...)
+	str := append([]byte(brue("┏ ")), p...)
 
 	return dw.out.Write(str)
 }
