@@ -20,8 +20,8 @@ import (
 )
 
 var ServerFPT = 30
-var WorldWidth = float64(800)
-var WorldHeight = float64(600)
+var WorldWidth = float64(800 * 2)
+var WorldHeight = float64(600 * 2)
 var Port = "6969"
 var Address = "127.0.0.1:" + Port
 var HttpAddress = "http://127.0.0.1:" + Port
@@ -143,8 +143,8 @@ func (game *GameServer) Tick() {
 					Player: Player{
 						Id:    playerHello.Id,
 						Speed: rand.Float64()*800 + 200,
-						X:     rand.Float64() * float64(WorldWidth),
-						Y:     rand.Float64() * float64(WorldHeight),
+						X:     rand.Float64()*float64(WorldWidth)/2 + float64(WorldWidth)/4,
+						Y:     rand.Float64()*float64(WorldHeight)/2 + +float64(WorldHeight)/4,
 					},
 				}
 
@@ -201,11 +201,19 @@ func (game *GameServer) Tick() {
 				playerMoved := event.Data.(*flatgen.PlayerMoved)
 				newPlayerInfo := playerMoved.Player(nil)
 
+				if newPlayerInfo.Id() != int32(event.PlayerId) {
+					event.Conn.CloseNow()
+					game.log.Errorf("player '%s' tried to cheat", event.PlayerId)
+				}
+
 				player, _ := game.Players.Get(int(newPlayerInfo.Id())) // TODO _
 				player.MovingLeft = newPlayerInfo.MovingLeft()
 				player.MovingRight = newPlayerInfo.MovingRight()
 				player.MovingUp = newPlayerInfo.MovingUp()
 				player.MovingDown = newPlayerInfo.MovingDown()
+
+				playerMoved.Player(nil).MutateX(int32(player.X))
+				playerMoved.Player(nil).MutateY(int32(player.Y))
 
 				game.Players.Set(int(newPlayerInfo.Id()), player)
 
@@ -343,6 +351,12 @@ func GetFlatEvent(builder *flatbuffers.Builder, kind string, bytes []byte) []byt
 // }
 
 func (game *GameServer) NotifyAll(msg []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			return
+		}
+	}()
+
 	for _, player := range game.Players.All() {
 		err := player.Conn.Write(context.Background(), websocket.MessageBinary, msg)
 		if err != nil {

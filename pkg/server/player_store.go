@@ -45,6 +45,12 @@ func (ps *BasePlayerStore) Delete(id int) {
 }
 
 func (ps *BasePlayerStore) All() iter.Seq2[int, PlayerWithSocket] {
+	defer func() {
+		if r := recover(); r != nil {
+			return
+		}
+	}()
+
 	return func(yield func(int, PlayerWithSocket) bool) {
 		ps.Players.Range(func(key, value any) bool {
 			return yield(key.(int), value.(PlayerWithSocket))

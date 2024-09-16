@@ -1,8 +1,8 @@
 import * as Game from './flatgen/game.js';
 import * as flatbuffers from './flatbuffers/flatbuffers.js';
 const Port = 6969;
-const WorldWidth = 800;
-const WorldHeight = 600;
+const WorldWidth = 800 * 2;
+const WorldHeight = 600 * 2;
 function isHello(x) {
     return x && x.Kind === "PlayerHello";
 }
@@ -78,10 +78,6 @@ function getFlatPlayerMoved(array) {
                 let eventResponse = Game.Event.createEvent(builder, kind, flatEventData);
                 builder.finish(eventResponse);
                 let responseBytes = builder.asUint8Array();
-                let z = new flatbuffers.ByteBuffer(responseBytes);
-                let y = Game.Event.getRootAsEvent(z);
-                let w = new flatbuffers.ByteBuffer(y.dataArray());
-                let x = Game.PlayerHelloConfirm.getRootAsPlayerHelloConfirm(w);
                 conn.send(responseBytes);
             });
         }

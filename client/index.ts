@@ -2,8 +2,8 @@ import * as Game from './flatgen/game.js'
 import * as flatbuffers from './flatbuffers/flatbuffers.js'
 
 const Port = 6969;
-const WorldWidth = 800;
-const WorldHeight = 600;
+const WorldWidth = 800*2;
+const WorldHeight = 600*2;
 
 function isHello(x) {
     return x && x.Kind === "PlayerHello"

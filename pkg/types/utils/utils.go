@@ -54,6 +54,16 @@ func NewFlatPlayerJoined(builder *flatbuffers.Builder, newPlayer Player) *flatge
 	return flatgen.GetRootAsPlayerJoined(builder.FinishedBytes(), 0)
 }
 
+func NewFlatPlayerMoved(builder *flatbuffers.Builder, newPlayer Player) *flatgen.PlayerMoved {
+	flatPlayer := NewFlatPlayer(builder, newPlayer)
+
+	flatgen.PlayerMovedStart(builder)
+	flatgen.PlayerMovedAddPlayer(builder, flatPlayer)
+	flatgen.FinishPlayerMovedBuffer(builder, flatgen.PlayerMovedEnd(builder))
+
+	return flatgen.GetRootAsPlayerMoved(builder.FinishedBytes(), 0)
+}
+
 func NewFlatPlayer(builder *flatbuffers.Builder, newPlayer Player) flatbuffers.UOffsetT {
 	flatgen.PlayerStart(builder)
 	flatgen.PlayerAddId(builder, int32(newPlayer.Id))
