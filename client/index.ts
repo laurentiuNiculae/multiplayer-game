@@ -76,7 +76,6 @@ function getFlatPlayerMoved(array: Uint8Array) {
 (() => {
     const conn = new WebSocket("/websocket")
     let myID = undefined
-    let bunica = false
     let Players = new Map<Number, Player>()
 
     let gameCanvas = document.getElementById("canvas") as HTMLCanvasElement
@@ -100,17 +99,20 @@ function getFlatPlayerMoved(array: Uint8Array) {
                 let playerHello = getFlatPlayerHello(flatEvent.dataArray())
 
                 myID = playerHello.id()
+                console.log("We got hello!", `Our id = "${myID}"`)
                 
                 let builder = new flatbuffers.Builder(256)
                 let helloResponse = Game.PlayerHelloConfirm.createPlayerHelloConfirm(builder, myID)
+                builder.finish(helloResponse)
+                let eventData = builder.asUint8Array()
+
+                let flatEventData = builder.createByteVector(eventData)
                 let kind = builder.createString("PlayerHelloConfirm")
-                let eventResponse = Game.Event.createEvent(builder, kind, helloResponse)
+                let eventResponse = Game.Event.createEvent(builder, kind, flatEventData)
                 builder.finish(eventResponse)
                 let responseBytes = builder.asUint8Array()
 
                 conn.send(responseBytes)
-
-                console.log("We got hello!", `Our id = "${myID}"`)
             })
         }  else {
             event.data.arrayBuffer().then((rawEventBlob) => {
@@ -176,8 +178,6 @@ function getFlatPlayerMoved(array: Uint8Array) {
 
             if (player.MovingLeft && player.X-movedDelta >= 0) {
                 player.X = player.X-movedDelta
-                // console.log("movedDelta: ", movedDelta)
-                console.log("speed: ", player.Speed)
 			}
 			if (player.MovingRight && player.X+movedDelta < WorldWidth - 20) {
 				player.X = player.X+movedDelta
@@ -200,7 +200,7 @@ function getFlatPlayerMoved(array: Uint8Array) {
         window.requestAnimationFrame(frame)
     }
 
-    window.addEventListener("keypress", (e) => {
+    window.addEventListener("keydown", (e) => {
         if (!e.repeat) {
             console.log("keydown")
             switch (e.code) {

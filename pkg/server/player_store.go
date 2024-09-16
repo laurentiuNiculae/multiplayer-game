@@ -3,6 +3,8 @@ package server
 import (
 	"iter"
 	"sync"
+
+	. "test/pkg/types"
 )
 
 type PlayerStore interface {

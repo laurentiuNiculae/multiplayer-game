@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"test/pkg/log"
+	. "test/pkg/types"
 	flatgen "test/pkg/types/flatgen/game"
+	"test/pkg/types/utils"
 
 	"github.com/coder/websocket"
 	flatbuffers "github.com/google/flatbuffers/go"
@@ -92,7 +94,7 @@ func (game *GameServer) Start() {
 				return
 			}
 
-			kind, data, err := getMessageKindAndDataFlat(dataBytes)
+			kind, data, err := utils.ParseEventBytes(dataBytes)
 			if err != nil {
 				game.log.Errorf("err: %v\n", err)
 				continue
@@ -163,7 +165,9 @@ func (game *GameServer) Tick() {
 				helloResponse := event.Data.(*flatgen.PlayerHelloConfirm)
 
 				if helloResponse.Id() == int32(event.PlayerId) {
-					fmt.Println("HELLO CONFIRMED BY PLAYER")
+					game.log.Debug("HELLO CONFIRMED BY PLAYER")
+				} else {
+					game.log.Debugf("player ID doesn't match expected:'%d', given:'%d'", event.PlayerId, helloResponse.Id())
 				}
 
 				builder := flatbuffers.NewBuilder(1024)
@@ -189,7 +193,7 @@ func (game *GameServer) Tick() {
 					game.log.Errorf("player '%s' tried to cheat", event.PlayerId)
 				}
 
-				response := GetFlatEvent(flatbuffers.NewBuilder(256), PlayerMovedKind,
+				response := GetFlatEvent(flatbuffers.NewBuilder(256), PlayerQuitKind,
 					playerQuit.Table().Bytes)
 
 				game.NotifyAll(response)
@@ -337,42 +341,6 @@ func GetFlatEvent(builder *flatbuffers.Builder, kind string, bytes []byte) []byt
 // 		return "", nil, fmt.Errorf("ERROR: bogus-amogus kind '%s'", kindHolder.Kind)
 // 	}
 // }
-
-func getMessageKindAndDataFlat(data []byte) (eventKind string, eventData any, err error) {
-	flatEvent := flatgen.GetRootAsEvent(data, 0)
-	eventKind = string(flatEvent.Kind())
-
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("was panic, returned panic value '%v'", r)
-		}
-	}()
-
-	switch eventKind {
-	case PlayerHelloKind:
-		flatPlayerHello := flatgen.GetRootAsPlayerHello(flatEvent.DataBytes(), 0)
-
-		return eventKind, flatPlayerHello, nil
-	case PlayerHelloConfirmKind:
-		flatPlayerHelloConfirm := flatgen.GetRootAsPlayerHelloConfirm(flatEvent.DataBytes(), 0)
-
-		return eventKind, flatPlayerHelloConfirm, nil
-	case PlayerQuitKind:
-		flatPlayerQuit := flatgen.GetRootAsPlayerQuit(flatEvent.DataBytes(), 0)
-
-		return eventKind, flatPlayerQuit, nil
-	case PlayerJoinedKind:
-		flatPlayerJoined := flatgen.GetRootAsPlayerJoined(flatEvent.DataBytes(), 0)
-
-		return eventKind, flatPlayerJoined, nil
-	case PlayerMovedKind:
-		flatPlayerMoved := flatgen.GetRootAsPlayerMoved(flatEvent.DataBytes(), 0)
-
-		return eventKind, flatPlayerMoved, nil
-	default:
-		return "", nil, fmt.Errorf("ERROR: bogus-amogus kind '%s'", string(flatEvent.Kind()))
-	}
-}
 
 func (game *GameServer) NotifyAll(msg []byte) {
 	for _, player := range game.Players.All() {
