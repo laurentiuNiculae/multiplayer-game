@@ -55,12 +55,6 @@ export class Event {
         const offset = builder.endObject();
         return offset;
     }
-    static finishEventBuffer(builder, offset) {
-        builder.finish(offset);
-    }
-    static finishSizePrefixedEventBuffer(builder, offset) {
-        builder.finish(offset, undefined, true);
-    }
     static createEvent(builder, kindOffset, dataOffset) {
         Event.startEvent(builder);
         Event.addKind(builder, kindOffset);

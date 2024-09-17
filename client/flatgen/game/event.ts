@@ -4,8 +4,6 @@
 
 import * as flatbuffers from '../../flatbuffers/flatbuffers.js';
 
-
-
 export class Event {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
@@ -73,14 +71,6 @@ static startDataVector(builder:flatbuffers.Builder, numElems:number) {
 static endEvent(builder:flatbuffers.Builder):flatbuffers.Offset {
   const offset = builder.endObject();
   return offset;
-}
-
-static finishEventBuffer(builder:flatbuffers.Builder, offset:flatbuffers.Offset) {
-  builder.finish(offset);
-}
-
-static finishSizePrefixedEventBuffer(builder:flatbuffers.Builder, offset:flatbuffers.Offset) {
-  builder.finish(offset, undefined, true);
 }
 
 static createEvent(builder:flatbuffers.Builder, kindOffset:flatbuffers.Offset, dataOffset:flatbuffers.Offset):flatbuffers.Offset {

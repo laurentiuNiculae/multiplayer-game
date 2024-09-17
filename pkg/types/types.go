@@ -26,12 +26,6 @@ type Event struct {
 	Data     any
 }
 
-type EventFlat struct {
-	Kind string
-	Conn *websocket.Conn
-	Data []byte
-}
-
 // ----
 
 const (
@@ -40,6 +34,7 @@ const (
 	PlayerQuitKind         = "PlayerQuit"
 	PlayerJoinedKind       = "PlayerJoined"
 	PlayerMovedKind        = "PlayerMoved"
+	PlayerMovedListKind    = "PlayerMovedList"
 )
 
 type KindHolder struct {

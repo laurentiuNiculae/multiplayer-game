@@ -23,12 +23,20 @@ table PlayerJoined {
 	player: Player;
 }
 
+table PlayerJoinedList {
+	player: [Player];
+}
+
 table PlayerHello {
 	id: int;
 }
 
 table PlayerHelloConfirm {
 	id: int;
+}
+
+table PlayerMovedList {
+    players: [Player];
 }
 
 table PlayerMoved {
@@ -40,4 +48,12 @@ table Event {
     data: [ubyte];
 }
 
-root_type Event;
+table RawEvent {
+    raw_data: [ubyte];
+}
+
+table EventList {
+    events: [RawEvent];
+}
+
+root_type EventList;

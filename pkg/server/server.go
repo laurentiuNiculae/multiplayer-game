@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"runtime"
 	"slices"
 	"sort"
 	"time"
@@ -19,7 +20,7 @@ import (
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 
-var ServerFPT = 30
+var ServerFPS = 30
 var WorldWidth = float64(800 * 2)
 var WorldHeight = float64(600 * 2)
 var Port = "6969"
@@ -37,20 +38,22 @@ func (igen *IdGenerator) NewId() int {
 }
 
 type GameServer struct {
-	Players     PlayerStore
-	EventQueue  chan Event
-	IdGenerator IdGenerator
-	mux         *http.ServeMux
-	log         log.MeloLog
+	Players        PlayerStore
+	EventQueue     chan Event
+	IdGenerator    IdGenerator
+	EventCollector *EventCollector
+	mux            *http.ServeMux
+	log            log.MeloLog
 }
 
 func NewGame() GameServer {
 	return GameServer{
-		Players:     NewPlayerStore(),
-		EventQueue:  make(chan Event, 200),
-		IdGenerator: IdGenerator{},
-		mux:         http.NewServeMux(),
-		log:         log.New(os.Stdout),
+		Players:        NewPlayerStore(),
+		EventQueue:     make(chan Event, 1000),
+		IdGenerator:    IdGenerator{},
+		EventCollector: NewEventCollector(),
+		mux:            http.NewServeMux(),
+		log:            log.New(os.Stdout),
 	}
 }
 
@@ -120,21 +123,36 @@ func (game *GameServer) Start() {
 	}
 }
 
+func PrintMemUsage(log log.MeloLog) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	// For info on each, see: https://golang.org/pkg/runtime/#MemStats
+	log.Debugf("Alloc = %v MiB\n\tTotalAlloc = %v MiB\n\tSys = %v MiB\n", bToMb(m.Alloc), bToMb(m.TotalAlloc), bToMb(m.Sys))
+}
+
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
+}
+
 func (game *GameServer) Tick() {
 	WaitServerIsReady(HttpAddress)
 
 	tickTimeArr := make([]float64, 30)
 	timeI := 0
 
-	ticker := time.NewTicker(1 * time.Second / time.Duration(ServerFPT))
+	ticker := time.NewTicker(1 * time.Second / time.Duration(ServerFPS))
 	previousTime, delta := time.Now(), time.Duration(0)
+
+	playerMovedBuilder := flatbuffers.NewBuilder(512)
+	playerMovedList := []*flatgen.PlayerMoved{}
 
 	<-ticker.C
 
 	for range ticker.C {
 		start := time.Now()
+		ctx := context.Background()
+
 		for range len(game.EventQueue) {
-			ctx := context.Background()
 			event := <-game.EventQueue
 
 			switch event.Kind {
@@ -145,9 +163,9 @@ func (game *GameServer) Tick() {
 					Conn: event.Conn,
 					Player: Player{
 						Id:    playerHello.Id,
-						Speed: rand.Float64()*800 + 200,
-						X:     rand.Float64()*float64(WorldWidth)/2 + float64(WorldWidth)/4,
-						Y:     rand.Float64()*float64(WorldHeight)/2 + +float64(WorldHeight)/4,
+						Speed: rand.Float64()*100 + 200,
+						X:     rand.Float64()*float64(WorldWidth)/4 + float64(WorldWidth)/2,
+						Y:     rand.Float64()*float64(WorldHeight)/4 + +float64(WorldHeight)/2,
 					},
 				}
 
@@ -155,10 +173,10 @@ func (game *GameServer) Tick() {
 
 				game.log.Infof("Player connected: '%v'", playerHello.Id)
 
-				builder := flatbuffers.NewBuilder(256)
+				builder := flatbuffers.NewBuilder(512)
 
 				eventData := GetFlatPlayerHello(builder, newPlayer.Player)
-				eventBytes := GetFlatEvent(builder, PlayerHelloKind, eventData)
+				eventBytes := GetFlatEvent(builder, PlayerHelloKind, eventData).Table().Bytes
 
 				err := newPlayer.Conn.Write(ctx, websocket.MessageBinary, eventBytes)
 				if err != nil {
@@ -173,8 +191,7 @@ func (game *GameServer) Tick() {
 					game.log.Debugf("player ID doesn't match expected:'%d', given:'%d'", event.PlayerId, helloResponse.Id())
 				}
 
-				builder := flatbuffers.NewBuilder(256)
-				builder2 := flatbuffers.NewBuilder(256)
+				builder := flatbuffers.NewBuilder(512)
 
 				newPlayer, _ := game.Players.Get(event.PlayerId)
 
@@ -182,14 +199,16 @@ func (game *GameServer) Tick() {
 				flatNewPlayerJoinedEvent := GetFlatEvent(builder, PlayerJoinedKind, flatNewPlayerJoined)
 
 				for _, otherPlayer := range game.Players.All() {
-					otherPlayer.Conn.Write(ctx, websocket.MessageBinary, flatNewPlayerJoinedEvent)
+					builder2 := flatbuffers.NewBuilder(512)
+					game.EventCollector.AddEvent(otherPlayer.Id, flatNewPlayerJoinedEvent)
+					// otherPlayer.Conn.Write(ctx, websocket.MessageBinary, flatNewPlayerJoinedEvent)
 
 					flatOtherPlayerJoined := GetFlatPlayerJoined(builder2, otherPlayer.Player)
 					flatOtherPlayerJoinedEvent := GetFlatEvent(builder2, PlayerJoinedKind, flatOtherPlayerJoined)
 					if otherPlayer.Id != newPlayer.Id {
-						newPlayer.Conn.Write(ctx, websocket.MessageBinary, flatOtherPlayerJoinedEvent)
+						game.EventCollector.AddEvent(newPlayer.Id, flatOtherPlayerJoinedEvent)
+						// newPlayer.Conn.Write(ctx, websocket.MessageBinary, flatOtherPlayerJoinedEvent)
 					}
-					builder2.Reset()
 				}
 			case PlayerQuitKind:
 				playerQuit := event.Data.(*flatgen.PlayerQuit)
@@ -199,11 +218,16 @@ func (game *GameServer) Tick() {
 					game.log.Errorf("player '%s' tried to cheat", event.PlayerId)
 				}
 
-				response := GetFlatEvent(flatbuffers.NewBuilder(256), PlayerQuitKind,
+				playerQuitEvent := GetFlatEvent(flatbuffers.NewBuilder(512), PlayerQuitKind,
 					playerQuit.Table().Bytes)
 
-				game.NotifyAll(response)
 				game.Players.Delete(event.PlayerId)
+				game.EventCollector.RemovePlayer(event.PlayerId)
+
+				for _, player := range game.Players.All() {
+					game.EventCollector.AddEvent(player.Id, playerQuitEvent)
+				}
+
 			case PlayerMovedKind:
 				playerMoved := event.Data.(*flatgen.PlayerMoved)
 				newPlayerInfo := playerMoved.Player(nil)
@@ -224,12 +248,37 @@ func (game *GameServer) Tick() {
 
 				game.Players.Set(int(newPlayerInfo.Id()), player)
 
-				response := GetFlatEvent(flatbuffers.NewBuilder(256), PlayerMovedKind,
-					playerMoved.Table().Bytes)
+				// playerMovedEvent := GetFlatEvent(flatbuffers.NewBuilder(512), PlayerMovedKind,
+				// 	playerMoved.Table().Bytes)
 
-				game.NotifyAll(response)
+				playerMovedList = append(playerMovedList, playerMoved)
+
+				// for _, player := range game.Players.All() {
+				// 	game.EventCollector.AddEvent(player.Id, playerMovedEvent)
+				// }
 			}
 		}
+
+		// calculate all players that moved event and send it.
+		if len(playerMovedList) > 0 {
+			flatPlayerMovedList := utils.NewFlatPlayerMovedList(playerMovedBuilder, playerMovedList)
+			game.EventCollector.AddGeneralEvent(utils.NewFlatEvent(playerMovedBuilder, PlayerMovedListKind,
+				flatPlayerMovedList.Table().Bytes))
+		}
+
+		// collect events here then send them.
+		for id, player := range game.Players.All() {
+			eventList := game.EventCollector.GetPlayerEventList(id)
+
+			if eventList != nil {
+				player.Conn.Write(ctx, websocket.MessageBinary, eventList.Table().Bytes)
+			}
+		}
+
+		game.EventCollector.Reset()
+		clear(playerMovedList)
+		playerMovedList = playerMovedList[:0]
+		playerMovedBuilder.Reset()
 
 		delta, previousTime = time.Since(previousTime), time.Now()
 
@@ -258,6 +307,7 @@ func (game *GameServer) Tick() {
 			})
 
 			game.log.Debugf("%06f", tickTimeArr[30/2])
+			PrintMemUsage(game.log)
 
 			timeI = 0
 		}
@@ -307,7 +357,7 @@ func GetFlatPlayer(builder *flatbuffers.Builder, newPlayer Player) flatbuffers.U
 	return flatgen.PlayerEnd(builder)
 }
 
-func GetFlatEvent(builder *flatbuffers.Builder, kind string, bytes []byte) []byte {
+func GetFlatEvent(builder *flatbuffers.Builder, kind string, bytes []byte) *flatgen.Event {
 	flatKind := builder.CreateByteString([]byte(kind))
 	flatBytes := builder.CreateByteVector(bytes)
 
@@ -316,7 +366,7 @@ func GetFlatEvent(builder *flatbuffers.Builder, kind string, bytes []byte) []byt
 	flatgen.EventAddData(builder, flatBytes)
 	builder.Finish(flatgen.EventEnd(builder))
 
-	return builder.FinishedBytes()
+	return flatgen.GetRootAsEvent(builder.FinishedBytes(), 0)
 }
 
 func (game *GameServer) NotifyAll(msg []byte) {

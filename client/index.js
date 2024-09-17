@@ -22,7 +22,7 @@ function min(a, b) {
     return b;
 }
 function max(a, b) {
-    if (a < b) {
+    if (a > b) {
         return a;
     }
     return b;
@@ -31,6 +31,12 @@ function rawBlobToFlatEvent(rawEventBlob) {
     var array = new Uint8Array(rawEventBlob);
     var buf = new flatbuffers.ByteBuffer(array);
     return Game.Event.getRootAsEvent(buf);
+}
+function rawBlobToFlatEventList(rawEventBlob) {
+    var array = new Uint8Array(rawEventBlob);
+    maxMessageSize = array.length;
+    var buf = new flatbuffers.ByteBuffer(array);
+    return Game.EventList.getRootAsEventList(buf);
 }
 function getFlatPlayerHello(array) {
     let eventDataBuf = new flatbuffers.ByteBuffer(array);
@@ -48,6 +54,11 @@ function getFlatPlayerMoved(array) {
     let eventDataBuf = new flatbuffers.ByteBuffer(array);
     return Game.PlayerMoved.getRootAsPlayerMoved(eventDataBuf);
 }
+function getFlatPlayerMovedList(array) {
+    let eventDataBuf = new flatbuffers.ByteBuffer(array);
+    return Game.PlayerMovedList.getRootAsPlayerMovedList(eventDataBuf);
+}
+let maxMessageSize = 0;
 (() => {
     const conn = new WebSocket("/websocket");
     let myID = undefined;
@@ -83,44 +94,56 @@ function getFlatPlayerMoved(array) {
         }
         else {
             event.data.arrayBuffer().then((rawEventBlob) => {
-                let flatEvent = rawBlobToFlatEvent(rawEventBlob);
-                switch (flatEvent.kind()) {
-                    case "PlayerJoined":
-                        let playerJoined = getFlatPlayerJoined(flatEvent.dataArray());
-                        console.log("New Player Joined", `His id = "${playerJoined.player().id()}"`);
-                        Players[playerJoined.player().id()] = {
-                            Id: playerJoined.player().id(),
-                            Speed: playerJoined.player().speed(),
-                            X: playerJoined.player().x(),
-                            Y: playerJoined.player().y(),
-                            MovingLeft: playerJoined.player().movingLeft(),
-                            MovingRight: playerJoined.player().movingRight(),
-                            MovingUp: playerJoined.player().movingUp(),
-                            MovingDown: playerJoined.player().movingDown()
-                        };
-                        break;
-                    case "PlayerQuit":
-                        let playerQuit = getFlatPlayerQuit(flatEvent.dataArray());
-                        delete Players[playerQuit.id()];
-                        console.log("New Player Quit", `His id = "${playerQuit.id()}"`);
-                        break;
-                    case "PlayerMoved":
-                        const playerMoved = getFlatPlayerMoved(flatEvent.dataArray());
-                        const playerId = playerMoved.player().id();
-                        let player = Players[playerId];
-                        player.X = playerMoved.player().x();
-                        player.Y = playerMoved.player().y();
-                        player.MovingLeft = playerMoved.player().movingLeft();
-                        player.MovingRight = playerMoved.player().movingRight();
-                        player.MovingUp = playerMoved.player().movingUp();
-                        player.MovingDown = playerMoved.player().movingDown();
-                        Players[playerId] = player;
-                        break;
-                    default:
-                        console.log("bogus amogus", event.data);
+                let flatEventList = rawBlobToFlatEventList(rawEventBlob);
+                console.log(`Received events len=${flatEventList.eventsLength()}`);
+                for (let i = 0; i < flatEventList.eventsLength(); i++) {
+                    let rawFlatEvent = flatEventList.events(i);
+                    let flatEvent = rawBlobToFlatEvent(rawFlatEvent.rawDataArray());
+                    switch (flatEvent.kind()) {
+                        case "PlayerJoined":
+                            let playerJoined = getFlatPlayerJoined(flatEvent.dataArray());
+                            console.log("New Player Joined", `His id = "${playerJoined.player().id()}"`);
+                            Players[playerJoined.player().id()] = {
+                                Id: playerJoined.player().id(),
+                                Speed: playerJoined.player().speed(),
+                                X: playerJoined.player().x(),
+                                Y: playerJoined.player().y(),
+                                MovingLeft: playerJoined.player().movingLeft(),
+                                MovingRight: playerJoined.player().movingRight(),
+                                MovingUp: playerJoined.player().movingUp(),
+                                MovingDown: playerJoined.player().movingDown()
+                            };
+                            break;
+                        case "PlayerQuit":
+                            let playerQuit = getFlatPlayerQuit(flatEvent.dataArray());
+                            delete Players[playerQuit.id()];
+                            console.log("New Player Quit", `His id = "${playerQuit.id()}"`);
+                            break;
+                        case "PlayerMovedList":
+                            const playerMovedList = getFlatPlayerMovedList(flatEvent.dataArray());
+                            console.log(`Player Moved Count = ${playerMovedList.playersLength()}`);
+                            for (let i = 0; i < playerMovedList.playersLength(); i++) {
+                                const playerMoved = playerMovedList.players(i);
+                                let player = Players[playerMoved.id()];
+                                if (player === undefined) {
+                                    player = {};
+                                }
+                                player.X = playerMoved.x();
+                                player.Y = playerMoved.y();
+                                player.MovingLeft = playerMoved.movingLeft();
+                                player.MovingRight = playerMoved.movingRight();
+                                player.MovingUp = playerMoved.movingUp();
+                                player.MovingDown = playerMoved.movingDown();
+                                Players[playerMoved.id()] = player;
+                            }
+                            break;
+                        default:
+                            console.log("bogus amogus", event.data);
+                    }
                 }
             });
         }
+        console.log("MAX MESSAGE SIZE IS ", maxMessageSize / 1024, "KB");
     });
     let prevTimestamp = 0;
     let frame = (timestamp) => {
@@ -147,13 +170,13 @@ function getFlatPlayerMoved(array) {
                 // console.log("movedDelta: ", movedDelta)
             }
             Players[id] = player;
-            ctx.fillRect(player.X, player.Y, 20, 20);
+            ctx.fillRect(player.X, player.Y, 8, 8);
         }
         window.requestAnimationFrame(frame);
     };
     window.addEventListener("keydown", (e) => {
         if (!e.repeat) {
-            console.log("keydown");
+            // console.log("keydown")
             switch (e.code) {
                 case "KeyW":
                     {
@@ -192,7 +215,7 @@ function getFlatPlayerMoved(array) {
     });
     window.addEventListener("keyup", (e) => {
         if (!e.repeat) {
-            console.log("keyup");
+            // console.log("keyup")
             switch (e.code) {
                 case "KeyW":
                     {

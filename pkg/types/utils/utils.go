@@ -64,6 +64,26 @@ func NewFlatPlayerMoved(builder *flatbuffers.Builder, newPlayer Player) *flatgen
 	return flatgen.GetRootAsPlayerMoved(builder.FinishedBytes(), 0)
 }
 
+func NewFlatPlayerMovedList(builder *flatbuffers.Builder, movingPlayers []*flatgen.PlayerMoved) *flatgen.PlayerMovedList {
+	flatMovingPlayers := make([]flatbuffers.UOffsetT, len(movingPlayers))
+
+	for i := range movingPlayers {
+		flatMovingPlayers[i] = NewFlatPlayerFromFlat(builder, movingPlayers[i].Player(nil))
+	}
+
+	flatgen.PlayerMovedListStartPlayersVector(builder, len(flatMovingPlayers))
+	for i := range flatMovingPlayers {
+		builder.PrependUOffsetT(flatMovingPlayers[i])
+	}
+	movingPlayersVecOffset := builder.EndVector(len(flatMovingPlayers))
+
+	flatgen.PlayerMovedListStart(builder)
+	flatgen.PlayerMovedListAddPlayers(builder, movingPlayersVecOffset)
+	flatgen.FinishPlayerMovedListBuffer(builder, flatgen.PlayerMovedListEnd(builder))
+
+	return flatgen.GetRootAsPlayerMovedList(builder.FinishedBytes(), 0)
+}
+
 func NewFlatPlayer(builder *flatbuffers.Builder, newPlayer Player) flatbuffers.UOffsetT {
 	flatgen.PlayerStart(builder)
 	flatgen.PlayerAddId(builder, int32(newPlayer.Id))
@@ -74,6 +94,20 @@ func NewFlatPlayer(builder *flatbuffers.Builder, newPlayer Player) flatbuffers.U
 	flatgen.PlayerAddMovingLeft(builder, newPlayer.MovingLeft)
 	flatgen.PlayerAddMovingRight(builder, newPlayer.MovingRight)
 	flatgen.PlayerAddMovingUp(builder, newPlayer.MovingUp)
+
+	return flatgen.PlayerEnd(builder)
+}
+
+func NewFlatPlayerFromFlat(builder *flatbuffers.Builder, newPlayer *flatgen.Player) flatbuffers.UOffsetT {
+	flatgen.PlayerStart(builder)
+	flatgen.PlayerAddId(builder, newPlayer.Id())
+	flatgen.PlayerAddX(builder, newPlayer.X())
+	flatgen.PlayerAddY(builder, newPlayer.Y())
+	flatgen.PlayerAddSpeed(builder, newPlayer.Speed())
+	flatgen.PlayerAddMovingDown(builder, newPlayer.MovingDown())
+	flatgen.PlayerAddMovingLeft(builder, newPlayer.MovingLeft())
+	flatgen.PlayerAddMovingRight(builder, newPlayer.MovingRight())
+	flatgen.PlayerAddMovingUp(builder, newPlayer.MovingUp())
 
 	return flatgen.PlayerEnd(builder)
 }
@@ -109,6 +143,10 @@ func ParseEventBytes(data []byte) (eventKind string, eventData any, err error) {
 		flatPlayerMoved := flatgen.GetRootAsPlayerMoved(flatEvent.DataBytes(), 0)
 
 		return eventKind, flatPlayerMoved, nil
+	case PlayerMovedListKind:
+		flatPlayerMovedList := flatgen.GetRootAsPlayerMovedList(flatEvent.DataBytes(), 0)
+
+		return eventKind, flatPlayerMovedList, nil
 	default:
 		return "", nil, fmt.Errorf("ERROR: bogus-amogus kind '%s'", string(flatEvent.Kind()))
 	}

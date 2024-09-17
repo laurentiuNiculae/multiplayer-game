@@ -2,9 +2,13 @@
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 export { BunicaEvent } from './game/bunica-event.js';
 export { Event } from './game/event.js';
+export { EventList } from './game/event-list.js';
 export { Player } from './game/player.js';
 export { PlayerHello } from './game/player-hello.js';
 export { PlayerHelloConfirm } from './game/player-hello-confirm.js';
 export { PlayerJoined } from './game/player-joined.js';
+export { PlayerJoinedList } from './game/player-joined-list.js';
 export { PlayerMoved } from './game/player-moved.js';
+export { PlayerMovedList } from './game/player-moved-list.js';
 export { PlayerQuit } from './game/player-quit.js';
+export { RawEvent } from './game/raw-event.js';
