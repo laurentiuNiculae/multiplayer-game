@@ -19,13 +19,13 @@ export class PlayerJoined {
     }
     player(obj) {
         const offset = this.bb.__offset(this.bb_pos, 4);
-        return offset ? (obj || new Player()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
+        return offset ? (obj || new Player()).__init(this.bb_pos + offset, this.bb) : null;
     }
     static startPlayerJoined(builder) {
         builder.startObject(1);
     }
     static addPlayer(builder, playerOffset) {
-        builder.addFieldOffset(0, playerOffset, 0);
+        builder.addFieldStruct(0, playerOffset, 0);
     }
     static endPlayerJoined(builder) {
         const offset = builder.endObject();

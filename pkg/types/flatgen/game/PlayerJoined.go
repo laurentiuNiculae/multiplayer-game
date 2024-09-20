@@ -44,7 +44,7 @@ func (rcv *PlayerJoined) Table() flatbuffers.Table {
 func (rcv *PlayerJoined) Player(obj *Player) *Player {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
-		x := rcv._tab.Indirect(o + rcv._tab.Pos)
+		x := o + rcv._tab.Pos
 		if obj == nil {
 			obj = new(Player)
 		}
@@ -58,7 +58,7 @@ func PlayerJoinedStart(builder *flatbuffers.Builder) {
 	builder.StartObject(1)
 }
 func PlayerJoinedAddPlayer(builder *flatbuffers.Builder, player flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(player), 0)
+	builder.PrependStructSlot(0, flatbuffers.UOffsetT(player), 0)
 }
 func PlayerJoinedEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()

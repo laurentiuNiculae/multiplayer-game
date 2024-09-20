@@ -17,37 +17,30 @@ export class PlayerJoinedList {
         bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
         return (obj || new PlayerJoinedList()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
     }
-    player(index, obj) {
+    players(index, obj) {
         const offset = this.bb.__offset(this.bb_pos, 4);
-        return offset ? (obj || new Player()).__init(this.bb.__indirect(this.bb.__vector(this.bb_pos + offset) + index * 4), this.bb) : null;
+        return offset ? (obj || new Player()).__init(this.bb.__vector(this.bb_pos + offset) + index * 20, this.bb) : null;
     }
-    playerLength() {
+    playersLength() {
         const offset = this.bb.__offset(this.bb_pos, 4);
         return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
     }
     static startPlayerJoinedList(builder) {
         builder.startObject(1);
     }
-    static addPlayer(builder, playerOffset) {
-        builder.addFieldOffset(0, playerOffset, 0);
+    static addPlayers(builder, playersOffset) {
+        builder.addFieldOffset(0, playersOffset, 0);
     }
-    static createPlayerVector(builder, data) {
-        builder.startVector(4, data.length, 4);
-        for (let i = data.length - 1; i >= 0; i--) {
-            builder.addOffset(data[i]);
-        }
-        return builder.endVector();
-    }
-    static startPlayerVector(builder, numElems) {
-        builder.startVector(4, numElems, 4);
+    static startPlayersVector(builder, numElems) {
+        builder.startVector(20, numElems, 4);
     }
     static endPlayerJoinedList(builder) {
         const offset = builder.endObject();
         return offset;
     }
-    static createPlayerJoinedList(builder, playerOffset) {
+    static createPlayerJoinedList(builder, playersOffset) {
         PlayerJoinedList.startPlayerJoinedList(builder);
-        PlayerJoinedList.addPlayer(builder, playerOffset);
+        PlayerJoinedList.addPlayers(builder, playersOffset);
         return PlayerJoinedList.endPlayerJoinedList(builder);
     }
 }

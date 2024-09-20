@@ -13,106 +13,53 @@ export class Player {
   return this;
 }
 
-static getRootAsPlayer(bb:flatbuffers.ByteBuffer, obj?:Player):Player {
-  return (obj || new Player()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-}
-
-static getSizePrefixedRootAsPlayer(bb:flatbuffers.ByteBuffer, obj?:Player):Player {
-  bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
-  return (obj || new Player()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
-}
-
 id():number {
-  const offset = this.bb!.__offset(this.bb_pos, 4);
-  return offset ? this.bb!.readInt32(this.bb_pos + offset) : 0;
+  return this.bb!.readInt32(this.bb_pos);
 }
 
 x():number {
-  const offset = this.bb!.__offset(this.bb_pos, 6);
-  return offset ? this.bb!.readInt32(this.bb_pos + offset) : 0;
+  return this.bb!.readInt32(this.bb_pos + 4);
 }
 
 y():number {
-  const offset = this.bb!.__offset(this.bb_pos, 8);
-  return offset ? this.bb!.readInt32(this.bb_pos + offset) : 0;
+  return this.bb!.readInt32(this.bb_pos + 8);
 }
 
 speed():number {
-  const offset = this.bb!.__offset(this.bb_pos, 10);
-  return offset ? this.bb!.readInt32(this.bb_pos + offset) : 0;
+  return this.bb!.readInt32(this.bb_pos + 12);
 }
 
 movingLeft():boolean {
-  const offset = this.bb!.__offset(this.bb_pos, 12);
-  return offset ? !!this.bb!.readInt8(this.bb_pos + offset) : false;
+  return !!this.bb!.readInt8(this.bb_pos + 16);
 }
 
 movingRight():boolean {
-  const offset = this.bb!.__offset(this.bb_pos, 14);
-  return offset ? !!this.bb!.readInt8(this.bb_pos + offset) : false;
+  return !!this.bb!.readInt8(this.bb_pos + 17);
 }
 
 movingUp():boolean {
-  const offset = this.bb!.__offset(this.bb_pos, 16);
-  return offset ? !!this.bb!.readInt8(this.bb_pos + offset) : false;
+  return !!this.bb!.readInt8(this.bb_pos + 18);
 }
 
 movingDown():boolean {
-  const offset = this.bb!.__offset(this.bb_pos, 18);
-  return offset ? !!this.bb!.readInt8(this.bb_pos + offset) : false;
+  return !!this.bb!.readInt8(this.bb_pos + 19);
 }
 
-static startPlayer(builder:flatbuffers.Builder) {
-  builder.startObject(8);
+static sizeOf():number {
+  return 20;
 }
 
-static addId(builder:flatbuffers.Builder, id:number) {
-  builder.addFieldInt32(0, id, 0);
+static createPlayer(builder:flatbuffers.Builder, id: number, x: number, y: number, speed: number, moving_left: boolean, moving_right: boolean, moving_up: boolean, moving_down: boolean):flatbuffers.Offset {
+  builder.prep(4, 20);
+  builder.writeInt8(Number(Boolean(moving_down)));
+  builder.writeInt8(Number(Boolean(moving_up)));
+  builder.writeInt8(Number(Boolean(moving_right)));
+  builder.writeInt8(Number(Boolean(moving_left)));
+  builder.writeInt32(speed);
+  builder.writeInt32(y);
+  builder.writeInt32(x);
+  builder.writeInt32(id);
+  return builder.offset();
 }
 
-static addX(builder:flatbuffers.Builder, x:number) {
-  builder.addFieldInt32(1, x, 0);
-}
-
-static addY(builder:flatbuffers.Builder, y:number) {
-  builder.addFieldInt32(2, y, 0);
-}
-
-static addSpeed(builder:flatbuffers.Builder, speed:number) {
-  builder.addFieldInt32(3, speed, 0);
-}
-
-static addMovingLeft(builder:flatbuffers.Builder, movingLeft:boolean) {
-  builder.addFieldInt8(4, +movingLeft, +false);
-}
-
-static addMovingRight(builder:flatbuffers.Builder, movingRight:boolean) {
-  builder.addFieldInt8(5, +movingRight, +false);
-}
-
-static addMovingUp(builder:flatbuffers.Builder, movingUp:boolean) {
-  builder.addFieldInt8(6, +movingUp, +false);
-}
-
-static addMovingDown(builder:flatbuffers.Builder, movingDown:boolean) {
-  builder.addFieldInt8(7, +movingDown, +false);
-}
-
-static endPlayer(builder:flatbuffers.Builder):flatbuffers.Offset {
-  const offset = builder.endObject();
-  return offset;
-}
-
-static createPlayer(builder:flatbuffers.Builder, id:number, x:number, y:number, speed:number, movingLeft:boolean, movingRight:boolean, movingUp:boolean, movingDown:boolean):flatbuffers.Offset {
-  Player.startPlayer(builder);
-  Player.addId(builder, id);
-  Player.addX(builder, x);
-  Player.addY(builder, y);
-  Player.addSpeed(builder, speed);
-  Player.addMovingLeft(builder, movingLeft);
-  Player.addMovingRight(builder, movingRight);
-  Player.addMovingUp(builder, movingUp);
-  Player.addMovingDown(builder, movingDown);
-  return Player.endPlayer(builder);
-}
 }

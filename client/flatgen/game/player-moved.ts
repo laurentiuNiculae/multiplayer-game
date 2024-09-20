@@ -27,7 +27,7 @@ static getSizePrefixedRootAsPlayerMoved(bb:flatbuffers.ByteBuffer, obj?:PlayerMo
 
 player(obj?:Player):Player|null {
   const offset = this.bb!.__offset(this.bb_pos, 4);
-  return offset ? (obj || new Player()).__init(this.bb!.__indirect(this.bb_pos + offset), this.bb!) : null;
+  return offset ? (obj || new Player()).__init(this.bb_pos + offset, this.bb!) : null;
 }
 
 static startPlayerMoved(builder:flatbuffers.Builder) {
@@ -35,7 +35,7 @@ static startPlayerMoved(builder:flatbuffers.Builder) {
 }
 
 static addPlayer(builder:flatbuffers.Builder, playerOffset:flatbuffers.Offset) {
-  builder.addFieldOffset(0, playerOffset, 0);
+  builder.addFieldStruct(0, playerOffset, 0);
 }
 
 static endPlayerMoved(builder:flatbuffers.Builder):flatbuffers.Offset {

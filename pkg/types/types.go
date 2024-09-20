@@ -33,6 +33,7 @@ const (
 	PlayerHelloConfirmKind = "PlayerHelloConfirm"
 	PlayerQuitKind         = "PlayerQuit"
 	PlayerJoinedKind       = "PlayerJoined"
+	PlayerJoinedListKind   = "PlayerJoinedList"
 	PlayerMovedKind        = "PlayerMoved"
 	PlayerMovedListKind    = "PlayerMovedList"
 )

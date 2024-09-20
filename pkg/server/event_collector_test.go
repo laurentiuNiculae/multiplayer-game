@@ -45,7 +45,7 @@ func TestEventCollector(t *testing.T) {
 
 		event := flatgen.GetRootAsEvent(rawEvent.RawDataBytes(), 0)
 
-		fmt.Println(event.Kind())
+		fmt.Println(string(event.Kind()))
 
 		playerJoined2 := flatgen.GetRootAsPlayerJoined(event.DataBytes(), 0)
 		fmt.Println("Player id ", playerJoined2.Player(nil).Id())
@@ -61,7 +61,7 @@ func TestEventCollector(t *testing.T) {
 
 		event := flatgen.GetRootAsEvent(rawEvent.RawDataBytes(), 0)
 
-		fmt.Println(event.Kind())
+		fmt.Println(string(event.Kind()))
 
 		playerJoined2 := flatgen.GetRootAsPlayerJoined(event.DataBytes(), 0)
 		fmt.Println("Player id ", playerJoined2.Player(nil).Id())
@@ -75,7 +75,7 @@ func TestEventCollectorGeneral(t *testing.T) {
 
 	playerMovedList := []*flatgen.PlayerMoved{
 		utils.NewFlatPlayerMoved(flatbuffers.NewBuilder(256), types.Player{Id: 69, X: 10, Y: 200, Speed: 420}),
-		utils.NewFlatPlayerMoved(flatbuffers.NewBuilder(256), types.Player{Id: 999, X: 999, Y: 999, Speed: 999}),
+		utils.NewFlatPlayerMoved(flatbuffers.NewBuilder(256), types.Player{Id: 989, X: 999, Y: 992, Speed: 909}),
 	}
 	flatPlayerMovedList := utils.NewFlatPlayerMovedList(flatbuffers.NewBuilder(512), playerMovedList)
 
@@ -104,12 +104,56 @@ func TestEventCollectorGeneral(t *testing.T) {
 	fmt.Println("Player id ", player.Id())
 	fmt.Println("Player X ", player.X())
 	fmt.Println("Player Y ", player.Y())
-	fmt.Println("Player Y ", player.Speed())
+	fmt.Println("Player Speed ", player.Speed())
 
 	playerMoved.Players(player, 1)
 
 	fmt.Println("Player id ", player.Id())
 	fmt.Println("Player X ", player.X())
 	fmt.Println("Player Y ", player.Y())
-	fmt.Println("Player Y ", player.Speed())
+	fmt.Println("Player Speed ", player.Speed())
+}
+
+func TestEventCollectorGeneralJoin(t *testing.T) {
+	ec := server.NewEventCollector()
+
+	playerJoinedList := []types.Player{
+		{Id: 69, X: 10, Y: 200, Speed: 420},
+		{Id: 999, X: 999, Y: 999, Speed: 999},
+	}
+	flatPlayerJoinedList := utils.NewFlatPlayerJoinedList(flatbuffers.NewBuilder(512), playerJoinedList)
+
+	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), "PlayerJoinedList",
+		flatPlayerJoinedList.Table().Bytes))
+	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), "PlayerJoinedList",
+		flatPlayerJoinedList.Table().Bytes))
+
+	ec.GetPlayerEventList(2)
+
+	playerEvents := ec.GetPlayerEventList(2)
+	fmt.Printf("list.EventsLength(): %v\n", playerEvents.EventsLength())
+
+	rawEvent := &flatgen.RawEvent{}
+	playerEvents.Events(rawEvent, 0)
+
+	event := flatgen.GetRootAsEvent(rawEvent.RawDataBytes(), 0)
+
+	fmt.Println(string(event.Kind()))
+
+	playerMoved := flatgen.GetRootAsPlayerJoinedList(event.DataBytes(), 0)
+
+	player := &flatgen.Player{}
+	playerMoved.Players(player, 0)
+
+	fmt.Println("Player id ", player.Id())
+	fmt.Println("Player X ", player.X())
+	fmt.Println("Player Y ", player.Y())
+	fmt.Println("Player Speed ", player.Speed())
+
+	playerMoved.Players(player, 1)
+
+	fmt.Println("Player id ", player.Id())
+	fmt.Println("Player X ", player.X())
+	fmt.Println("Player Y ", player.Y())
+	fmt.Println("Player Speed ", player.Speed())
 }

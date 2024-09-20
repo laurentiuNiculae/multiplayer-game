@@ -45,8 +45,7 @@ func (rcv *PlayerMovedList) Players(obj *Player, j int) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
 		x := rcv._tab.Vector(o)
-		x += flatbuffers.UOffsetT(j) * 4
-		x = rcv._tab.Indirect(x)
+		x += flatbuffers.UOffsetT(j) * 20
 		obj.Init(rcv._tab.Bytes, x)
 		return true
 	}
@@ -68,7 +67,7 @@ func PlayerMovedListAddPlayers(builder *flatbuffers.Builder, players flatbuffers
 	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(players), 0)
 }
 func PlayerMovedListStartPlayersVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
-	return builder.StartVector(4, numElems, 4)
+	return builder.StartVector(20, numElems, 4)
 }
 func PlayerMovedListEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()

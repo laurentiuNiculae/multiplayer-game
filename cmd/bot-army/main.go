@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -70,7 +69,7 @@ func GameLoop(ctx context.Context, conn *websocket.Conn, playerUpdateChan <-chan
 	}()
 	myPlayer := <-playerUpdateChan
 
-	moveTicker := time.NewTicker(1000 * time.Millisecond)
+	moveTicker := time.NewTicker(200 * time.Millisecond)
 	moveCount := 0
 
 	ticker := time.NewTicker(1 * time.Second / time.Duration(ServerFPT))
@@ -105,8 +104,8 @@ func GameLoop(ctx context.Context, conn *websocket.Conn, playerUpdateChan <-chan
 				myPlayer.Y = myPlayer.Y + movedDelta
 			}
 		case <-moveTicker.C:
-			napTime := 1000*time.Millisecond + (time.Duration(rand.Intn(600))-1000)*time.Millisecond
-			time.Sleep(napTime)
+			// napTime := 1000*time.Millisecond + (time.Duration(rand.Intn(600))-1000)*time.Millisecond
+			// time.Sleep(napTime)
 			builder := flatbuffers.NewBuilder(256)
 
 			switch moveCount {
@@ -235,6 +234,28 @@ func RunBot(ctx context.Context, wg *sync.WaitGroup, Id int) {
 					fmt.Printf("Bot%v Confirmed Join: \n", Id)
 				}
 
+			} else if kind == PlayerJoinedListKind {
+				playerJoinedList := data.(*flatgen.PlayerJoinedList)
+				player := &flatgen.Player{}
+
+				for i := range playerJoinedList.PlayersLength() {
+					playerJoinedList.Players(player, i)
+
+					if player.Id() == int32(myId) {
+						select {
+						case playerUpdateChan <- Player{
+							Id:    int(player.Id()),
+							X:     float64(player.X()),
+							Y:     float64(player.Y()),
+							Speed: float64(player.Speed()),
+						}:
+						case <-ctx.Done():
+							return
+						}
+
+						fmt.Printf("Bot%v Confirmed Join: \n", Id)
+					}
+				}
 			} else if kind == PlayerMovedListKind {
 				playerMovedList := data.(*flatgen.PlayerMovedList)
 
@@ -262,7 +283,7 @@ func RunBot(ctx context.Context, wg *sync.WaitGroup, Id int) {
 }
 
 func main() {
-	NumBots := 400
+	NumBots := 800
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

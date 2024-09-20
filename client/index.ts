@@ -13,6 +13,10 @@ function isPlayerJoined(x) {
     return x && x.Kind === "PlayerJoined"
 }
 
+function isPlayerJoinedList(x) {
+    return x && x.Kind === "PlayerJoinedList"
+}
+
 function isPlayerQuit(x) {
     return x && x.Kind === "PlayerQuit"
 }
@@ -55,7 +59,8 @@ function rawBlobToFlatEvent(rawEventBlob) {
 
 function rawBlobToFlatEventList(rawEventBlob) {
     var array = new Uint8Array(rawEventBlob)
-    maxMessageSize = array.length
+    maxMessageSize = max(maxMessageSize, array.length)
+    lastMessageSize = array.length
     var buf = new flatbuffers.ByteBuffer(array);
     return Game.EventList.getRootAsEventList(buf);
 }
@@ -68,6 +73,11 @@ function getFlatPlayerHello(array: Uint8Array) {
 function getFlatPlayerJoined(array: Uint8Array) {
     let eventDataBuf = new flatbuffers.ByteBuffer(array);
     return Game.PlayerJoined.getRootAsPlayerJoined(eventDataBuf);
+}
+
+function getFlatPlayerJoinedList(array: Uint8Array) {
+    let eventDataBuf = new flatbuffers.ByteBuffer(array);
+    return Game.PlayerJoinedList.getRootAsPlayerJoinedList(eventDataBuf);
 }
 
 function getFlatPlayerQuit(array: Uint8Array) {
@@ -86,6 +96,7 @@ function getFlatPlayerMovedList(array: Uint8Array) {
 }
 
 let maxMessageSize = 0;
+let lastMessageSize = 0;
 
 (() => {
     const conn = new WebSocket("/websocket")
@@ -142,7 +153,7 @@ let maxMessageSize = 0;
                         case "PlayerJoined":
                             let playerJoined = getFlatPlayerJoined(flatEvent.dataArray())
         
-                            console.log("New Player Joined", `His id = "${playerJoined.player().id()}"`)
+                            // console.log("New Player Joined", `His id = "${playerJoined.player().id()}"`)
                             
                             Players[playerJoined.player().id()] = {
                                 Id: playerJoined.player().id(),
@@ -155,6 +166,26 @@ let maxMessageSize = 0;
                                 MovingDown:  playerJoined.player().movingDown()
                             }
                             break
+                        case "PlayerJoinedList":
+                            let playerJoinedList = getFlatPlayerJoinedList(flatEvent.dataArray())
+
+                            for (let i = 0; i < playerJoinedList.playersLength(); i ++) {
+                                let playerJoined = playerJoinedList.players(i)
+
+                                // console.log("New Player Joined List", `His id = "${playerJoined.id()}"`)
+
+                                Players[playerJoined.id()] = {
+                                    Id: playerJoined.id(),
+                                    Speed: playerJoined.speed(),
+                                    X: playerJoined.x(),
+                                    Y: playerJoined.y(),
+                                    MovingLeft:  playerJoined.movingLeft(),
+                                    MovingRight:  playerJoined.movingRight(),
+                                    MovingUp:  playerJoined.movingUp(),
+                                    MovingDown:  playerJoined.movingDown()
+                                }
+                            }
+                            break
                         case "PlayerQuit":
                             let playerQuit = getFlatPlayerQuit(flatEvent.dataArray())
     
@@ -163,7 +194,7 @@ let maxMessageSize = 0;
                             break
                         case "PlayerMovedList":
                             const playerMovedList = getFlatPlayerMovedList(flatEvent.dataArray())
-                            console.log(`Player Moved Count = ${playerMovedList.playersLength()}`)
+                            // console.log(`Player Moved Count = ${playerMovedList.playersLength()}`)
                             for (let i = 0; i < playerMovedList.playersLength(); i++) {
                                 const playerMoved = playerMovedList.players(i) 
     
@@ -189,7 +220,7 @@ let maxMessageSize = 0;
             })
         }
 
-        console.log("MAX MESSAGE SIZE IS ", maxMessageSize/1024, "KB")
+        console.log("MESSAGE SIZE IS ", lastMessageSize/1024, "KB", "MAX: ", maxMessageSize/1024, "KB")
     })
 
     let prevTimestamp = 0

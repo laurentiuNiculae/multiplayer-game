@@ -49,7 +49,7 @@ type GameServer struct {
 func NewGame() GameServer {
 	return GameServer{
 		Players:        NewPlayerStore(),
-		EventQueue:     make(chan Event, 1000),
+		EventQueue:     make(chan Event, 2000),
 		IdGenerator:    IdGenerator{},
 		EventCollector: NewEventCollector(),
 		mux:            http.NewServeMux(),
@@ -57,7 +57,7 @@ func NewGame() GameServer {
 	}
 }
 
-func (game *GameServer) Start() {
+func (game *GameServer) Start(ctx context.Context) {
 	game.mux.Handle("/", http.FileServer(http.Dir(".")))
 	game.mux.HandleFunc("/websocket", func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.Background()
@@ -76,7 +76,7 @@ func (game *GameServer) Start() {
 				PlayerId: playerId,
 				Kind:     PlayerQuitKind,
 				Conn:     wcon,
-				Data:     flatgen.GetRootAsPlayerQuit(GetFlatPlayerQuit(builder, playerId), 0),
+				Data:     flatgen.GetRootAsPlayerQuit(utils.GetFlatPlayerQuit(builder, playerId), 0),
 			}
 
 			game.log.Infof("Player '%v' diconnected", playerId)
@@ -111,16 +111,20 @@ func (game *GameServer) Start() {
 	})
 
 	go func() {
-		WaitServerIsReady(HttpAddress)
+		utils.WaitServerIsReady(HttpAddress)
 		game.log.Info("Listening to server")
 	}()
 
 	go game.Tick()
 
-	err := http.ListenAndServe(Address, game.mux)
-	if err != nil {
-		game.log.Errorf("err: %s\n", err.Error())
-	}
+	go func() {
+		err := http.ListenAndServe(Address, game.mux)
+		if err != nil {
+			game.log.Errorf("err: %s\n", err.Error())
+		}
+	}()
+
+	<-ctx.Done()
 }
 
 func PrintMemUsage(log log.MeloLog) {
@@ -135,7 +139,7 @@ func bToMb(b uint64) uint64 {
 }
 
 func (game *GameServer) Tick() {
-	WaitServerIsReady(HttpAddress)
+	utils.WaitServerIsReady(HttpAddress)
 
 	tickTimeArr := make([]float64, 30)
 	timeI := 0
@@ -146,11 +150,24 @@ func (game *GameServer) Tick() {
 	playerMovedBuilder := flatbuffers.NewBuilder(512)
 	playerMovedList := []*flatgen.PlayerMoved{}
 
+	playerJoinedBuilder := flatbuffers.NewBuilder(512)
+	playerJoinedBuilder2 := flatbuffers.NewBuilder(512)
+	playerJoinedList := []Player{}
+
 	<-ticker.C
 
+	avgEventsPerTick := float64(0)
+	avgDataPerSecond := float64(0)
+	totalEvents := float64(0)
+	totalEventsPerSecond := float64(0)
+
+	start := time.Now()
+
 	for range ticker.C {
-		start := time.Now()
+		startTick := time.Now()
 		ctx := context.Background()
+
+		eventsPerTick := float64(len(game.EventQueue))
 
 		for range len(game.EventQueue) {
 			event := <-game.EventQueue
@@ -175,8 +192,8 @@ func (game *GameServer) Tick() {
 
 				builder := flatbuffers.NewBuilder(512)
 
-				eventData := GetFlatPlayerHello(builder, newPlayer.Player)
-				eventBytes := GetFlatEvent(builder, PlayerHelloKind, eventData).Table().Bytes
+				eventData := utils.GetFlatPlayerHello(builder, newPlayer.Player)
+				eventBytes := utils.GetFlatEvent(builder, PlayerHelloKind, eventData).Table().Bytes
 
 				err := newPlayer.Conn.Write(ctx, websocket.MessageBinary, eventBytes)
 				if err != nil {
@@ -191,23 +208,19 @@ func (game *GameServer) Tick() {
 					game.log.Debugf("player ID doesn't match expected:'%d', given:'%d'", event.PlayerId, helloResponse.Id())
 				}
 
-				builder := flatbuffers.NewBuilder(512)
-
 				newPlayer, _ := game.Players.Get(event.PlayerId)
 
-				flatNewPlayerJoined := GetFlatPlayerJoined(builder, newPlayer.Player)
-				flatNewPlayerJoinedEvent := GetFlatEvent(builder, PlayerJoinedKind, flatNewPlayerJoined)
+				playerJoinedList = append(playerJoinedList, newPlayer.Player)
+
+				playerJoinedList = append(playerJoinedList, newPlayer.Player)
 
 				for _, otherPlayer := range game.Players.All() {
 					builder2 := flatbuffers.NewBuilder(512)
-					game.EventCollector.AddEvent(otherPlayer.Id, flatNewPlayerJoinedEvent)
-					// otherPlayer.Conn.Write(ctx, websocket.MessageBinary, flatNewPlayerJoinedEvent)
 
-					flatOtherPlayerJoined := GetFlatPlayerJoined(builder2, otherPlayer.Player)
-					flatOtherPlayerJoinedEvent := GetFlatEvent(builder2, PlayerJoinedKind, flatOtherPlayerJoined)
+					flatOtherPlayerJoined := utils.GetFlatPlayerJoined(builder2, otherPlayer.Player)
+					flatOtherPlayerJoinedEvent := utils.GetFlatEvent(builder2, PlayerJoinedKind, flatOtherPlayerJoined)
 					if otherPlayer.Id != newPlayer.Id {
 						game.EventCollector.AddEvent(newPlayer.Id, flatOtherPlayerJoinedEvent)
-						// newPlayer.Conn.Write(ctx, websocket.MessageBinary, flatOtherPlayerJoinedEvent)
 					}
 				}
 			case PlayerQuitKind:
@@ -218,7 +231,7 @@ func (game *GameServer) Tick() {
 					game.log.Errorf("player '%s' tried to cheat", event.PlayerId)
 				}
 
-				playerQuitEvent := GetFlatEvent(flatbuffers.NewBuilder(512), PlayerQuitKind,
+				playerQuitEvent := utils.GetFlatEvent(flatbuffers.NewBuilder(512), PlayerQuitKind,
 					playerQuit.Table().Bytes)
 
 				game.Players.Delete(event.PlayerId)
@@ -248,7 +261,7 @@ func (game *GameServer) Tick() {
 
 				game.Players.Set(int(newPlayerInfo.Id()), player)
 
-				// playerMovedEvent := GetFlatEvent(flatbuffers.NewBuilder(512), PlayerMovedKind,
+				// playerMovedEvent := utils.GetFlatEvent(flatbuffers.NewBuilder(512), PlayerMovedKind,
 				// 	playerMoved.Table().Bytes)
 
 				playerMovedList = append(playerMovedList, playerMoved)
@@ -266,19 +279,31 @@ func (game *GameServer) Tick() {
 				flatPlayerMovedList.Table().Bytes))
 		}
 
+		if len(playerJoinedList) > 0 {
+			flatPlayerJoinedList := utils.NewFlatPlayerJoinedList(playerJoinedBuilder2, playerJoinedList)
+			game.EventCollector.AddGeneralEvent(utils.NewFlatEvent(playerJoinedBuilder2, PlayerJoinedListKind,
+				flatPlayerJoinedList.Table().Bytes))
+		}
+
 		// collect events here then send them.
 		for id, player := range game.Players.All() {
 			eventList := game.EventCollector.GetPlayerEventList(id)
 
 			if eventList != nil {
+				avgDataPerSecond += float64(len(eventList.Table().Bytes))
 				player.Conn.Write(ctx, websocket.MessageBinary, eventList.Table().Bytes)
 			}
 		}
 
 		game.EventCollector.Reset()
 		clear(playerMovedList)
+
 		playerMovedList = playerMovedList[:0]
 		playerMovedBuilder.Reset()
+
+		playerJoinedList = playerJoinedList[:0]
+		playerJoinedBuilder.Reset()
+		playerJoinedBuilder2.Reset()
 
 		delta, previousTime = time.Since(previousTime), time.Now()
 
@@ -306,67 +331,19 @@ func (game *GameServer) Tick() {
 				return tickTimeArr[i] < tickTimeArr[j]
 			})
 
-			game.log.Debugf("%06f", tickTimeArr[30/2])
+			game.log.Debugf("Tick: %06f  Avg-Events: %02f TotalEvents/s: %02f avgDataPerSecond: %02f", tickTimeArr[30/2], avgEventsPerTick, totalEventsPerSecond, avgDataPerSecond/1024/1024/time.Since(start).Seconds())
 			PrintMemUsage(game.log)
 
 			timeI = 0
+			avgEventsPerTick = 0
 		}
 
-		tickTimeArr[timeI] = time.Since(start).Seconds()
+		tickTimeArr[timeI] = time.Since(startTick).Seconds()
+		avgEventsPerTick += eventsPerTick / 30
+		totalEvents += eventsPerTick
+		totalEventsPerSecond = totalEvents / time.Since(start).Seconds()
 		timeI++
 	}
-}
-
-func GetFlatPlayerHello(builder *flatbuffers.Builder, newPlayer Player) []byte {
-	flatgen.PlayerHelloStart(builder)
-	flatgen.PlayerHelloAddId(builder, int32(newPlayer.Id))
-	flatgen.FinishPlayerHelloBuffer(builder, flatgen.PlayerHelloEnd(builder))
-
-	return builder.FinishedBytes()
-}
-
-func GetFlatPlayerQuit(builder *flatbuffers.Builder, playerId int) []byte {
-	flatgen.PlayerQuitStart(builder)
-	flatgen.PlayerQuitAddId(builder, int32(playerId))
-	flatgen.FinishPlayerQuitBuffer(builder, flatgen.PlayerQuitEnd(builder))
-
-	return builder.FinishedBytes()
-}
-
-func GetFlatPlayerJoined(builder *flatbuffers.Builder, newPlayer Player) []byte {
-	flatPlayer := GetFlatPlayer(builder, newPlayer)
-
-	flatgen.PlayerJoinedStart(builder)
-	flatgen.PlayerJoinedAddPlayer(builder, flatPlayer)
-	flatgen.FinishPlayerJoinedBuffer(builder, flatgen.PlayerJoinedEnd(builder))
-
-	return builder.FinishedBytes()
-}
-
-func GetFlatPlayer(builder *flatbuffers.Builder, newPlayer Player) flatbuffers.UOffsetT {
-	flatgen.PlayerStart(builder)
-	flatgen.PlayerAddId(builder, int32(newPlayer.Id))
-	flatgen.PlayerAddX(builder, int32(newPlayer.X))
-	flatgen.PlayerAddY(builder, int32(newPlayer.Y))
-	flatgen.PlayerAddSpeed(builder, int32(newPlayer.Speed))
-	flatgen.PlayerAddMovingDown(builder, newPlayer.MovingDown)
-	flatgen.PlayerAddMovingLeft(builder, newPlayer.MovingLeft)
-	flatgen.PlayerAddMovingRight(builder, newPlayer.MovingRight)
-	flatgen.PlayerAddMovingUp(builder, newPlayer.MovingUp)
-
-	return flatgen.PlayerEnd(builder)
-}
-
-func GetFlatEvent(builder *flatbuffers.Builder, kind string, bytes []byte) *flatgen.Event {
-	flatKind := builder.CreateByteString([]byte(kind))
-	flatBytes := builder.CreateByteVector(bytes)
-
-	flatgen.EventStart(builder)
-	flatgen.EventAddKind(builder, flatKind)
-	flatgen.EventAddData(builder, flatBytes)
-	builder.Finish(flatgen.EventEnd(builder))
-
-	return flatgen.GetRootAsEvent(builder.FinishedBytes(), 0)
 }
 
 func (game *GameServer) NotifyAll(msg []byte) {
@@ -386,16 +363,5 @@ func (game *GameServer) NotifyAllElse(msg []byte, except ...int) {
 				continue
 			}
 		}
-	}
-}
-
-func WaitServerIsReady(url string) {
-	for {
-		_, err := http.Get(url)
-		if err == nil {
-			return
-		}
-
-		time.Sleep(1 * time.Second)
 	}
 }

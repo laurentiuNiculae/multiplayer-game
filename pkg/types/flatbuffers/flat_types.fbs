@@ -4,7 +4,7 @@ table BunicaEvent {
     id: string;
 }
 
-table Player {
+struct Player {
     id: int;
     x: int;
     y: int;
@@ -24,7 +24,7 @@ table PlayerJoined {
 }
 
 table PlayerJoinedList {
-	player: [Player];
+	players: [Player];
 }
 
 table PlayerHello {

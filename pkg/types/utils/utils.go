@@ -2,8 +2,10 @@ package utils
 
 import (
 	"fmt"
+	"net/http"
 	. "test/pkg/types"
 	flatgen "test/pkg/types/flatgen/game"
+	"time"
 
 	flatbuffers "github.com/google/flatbuffers/go"
 )
@@ -65,17 +67,11 @@ func NewFlatPlayerMoved(builder *flatbuffers.Builder, newPlayer Player) *flatgen
 }
 
 func NewFlatPlayerMovedList(builder *flatbuffers.Builder, movingPlayers []*flatgen.PlayerMoved) *flatgen.PlayerMovedList {
-	flatMovingPlayers := make([]flatbuffers.UOffsetT, len(movingPlayers))
-
+	flatgen.PlayerMovedListStartPlayersVector(builder, len(movingPlayers))
 	for i := range movingPlayers {
-		flatMovingPlayers[i] = NewFlatPlayerFromFlat(builder, movingPlayers[i].Player(nil))
+		NewFlatPlayerFromFlat(builder, movingPlayers[i].Player(nil))
 	}
-
-	flatgen.PlayerMovedListStartPlayersVector(builder, len(flatMovingPlayers))
-	for i := range flatMovingPlayers {
-		builder.PrependUOffsetT(flatMovingPlayers[i])
-	}
-	movingPlayersVecOffset := builder.EndVector(len(flatMovingPlayers))
+	movingPlayersVecOffset := builder.EndVector(len(movingPlayers))
 
 	flatgen.PlayerMovedListStart(builder)
 	flatgen.PlayerMovedListAddPlayers(builder, movingPlayersVecOffset)
@@ -84,32 +80,44 @@ func NewFlatPlayerMovedList(builder *flatbuffers.Builder, movingPlayers []*flatg
 	return flatgen.GetRootAsPlayerMovedList(builder.FinishedBytes(), 0)
 }
 
-func NewFlatPlayer(builder *flatbuffers.Builder, newPlayer Player) flatbuffers.UOffsetT {
-	flatgen.PlayerStart(builder)
-	flatgen.PlayerAddId(builder, int32(newPlayer.Id))
-	flatgen.PlayerAddX(builder, int32(newPlayer.X))
-	flatgen.PlayerAddY(builder, int32(newPlayer.Y))
-	flatgen.PlayerAddSpeed(builder, int32(newPlayer.Speed))
-	flatgen.PlayerAddMovingDown(builder, newPlayer.MovingDown)
-	flatgen.PlayerAddMovingLeft(builder, newPlayer.MovingLeft)
-	flatgen.PlayerAddMovingRight(builder, newPlayer.MovingRight)
-	flatgen.PlayerAddMovingUp(builder, newPlayer.MovingUp)
+func NewFlatPlayerJoinedList(builder *flatbuffers.Builder, joinedPlayers []Player) *flatgen.PlayerJoinedList {
+	flatgen.PlayerJoinedListStartPlayersVector(builder, len(joinedPlayers))
+	for i := range joinedPlayers {
+		NewFlatPlayer(builder, joinedPlayers[i])
+	}
+	movingPlayersVecOffset := builder.EndVector(len(joinedPlayers))
 
-	return flatgen.PlayerEnd(builder)
+	flatgen.PlayerJoinedListStart(builder)
+	flatgen.PlayerJoinedListAddPlayers(builder, movingPlayersVecOffset)
+	flatgen.FinishPlayerJoinedListBuffer(builder, flatgen.PlayerJoinedListEnd(builder))
+
+	return flatgen.GetRootAsPlayerJoinedList(builder.FinishedBytes(), 0)
+}
+
+func NewFlatPlayer(builder *flatbuffers.Builder, newPlayer Player) flatbuffers.UOffsetT {
+	return flatgen.CreatePlayer(builder,
+		int32(newPlayer.Id),
+		int32(newPlayer.X),
+		int32(newPlayer.Y),
+		int32(newPlayer.Speed),
+		newPlayer.MovingLeft,
+		newPlayer.MovingRight,
+		newPlayer.MovingUp,
+		newPlayer.MovingDown,
+	)
 }
 
 func NewFlatPlayerFromFlat(builder *flatbuffers.Builder, newPlayer *flatgen.Player) flatbuffers.UOffsetT {
-	flatgen.PlayerStart(builder)
-	flatgen.PlayerAddId(builder, newPlayer.Id())
-	flatgen.PlayerAddX(builder, newPlayer.X())
-	flatgen.PlayerAddY(builder, newPlayer.Y())
-	flatgen.PlayerAddSpeed(builder, newPlayer.Speed())
-	flatgen.PlayerAddMovingDown(builder, newPlayer.MovingDown())
-	flatgen.PlayerAddMovingLeft(builder, newPlayer.MovingLeft())
-	flatgen.PlayerAddMovingRight(builder, newPlayer.MovingRight())
-	flatgen.PlayerAddMovingUp(builder, newPlayer.MovingUp())
-
-	return flatgen.PlayerEnd(builder)
+	return flatgen.CreatePlayer(builder,
+		int32(newPlayer.Id()),
+		int32(newPlayer.X()),
+		int32(newPlayer.Y()),
+		int32(newPlayer.Speed()),
+		newPlayer.MovingLeft(),
+		newPlayer.MovingRight(),
+		newPlayer.MovingUp(),
+		newPlayer.MovingDown(),
+	)
 }
 
 func ParseEventBytes(data []byte) (eventKind string, eventData any, err error) {
@@ -139,6 +147,10 @@ func ParseEventBytes(data []byte) (eventKind string, eventData any, err error) {
 		flatPlayerJoined := flatgen.GetRootAsPlayerJoined(flatEvent.DataBytes(), 0)
 
 		return eventKind, flatPlayerJoined, nil
+	case PlayerJoinedListKind:
+		flatPlayerJoinedList := flatgen.GetRootAsPlayerJoinedList(flatEvent.DataBytes(), 0)
+
+		return eventKind, flatPlayerJoinedList, nil
 	case PlayerMovedKind:
 		flatPlayerMoved := flatgen.GetRootAsPlayerMoved(flatEvent.DataBytes(), 0)
 
@@ -149,5 +161,54 @@ func ParseEventBytes(data []byte) (eventKind string, eventData any, err error) {
 		return eventKind, flatPlayerMovedList, nil
 	default:
 		return "", nil, fmt.Errorf("ERROR: bogus-amogus kind '%s'", string(flatEvent.Kind()))
+	}
+}
+
+func GetFlatPlayerHello(builder *flatbuffers.Builder, newPlayer Player) []byte {
+	flatgen.PlayerHelloStart(builder)
+	flatgen.PlayerHelloAddId(builder, int32(newPlayer.Id))
+	flatgen.FinishPlayerHelloBuffer(builder, flatgen.PlayerHelloEnd(builder))
+
+	return builder.FinishedBytes()
+}
+
+func GetFlatPlayerQuit(builder *flatbuffers.Builder, playerId int) []byte {
+	flatgen.PlayerQuitStart(builder)
+	flatgen.PlayerQuitAddId(builder, int32(playerId))
+	flatgen.FinishPlayerQuitBuffer(builder, flatgen.PlayerQuitEnd(builder))
+
+	return builder.FinishedBytes()
+}
+
+func GetFlatPlayerJoined(builder *flatbuffers.Builder, newPlayer Player) []byte {
+	flatPlayer := NewFlatPlayer(builder, newPlayer)
+
+	flatgen.PlayerJoinedStart(builder)
+	flatgen.PlayerJoinedAddPlayer(builder, flatPlayer)
+	flatgen.FinishPlayerJoinedBuffer(builder, flatgen.PlayerJoinedEnd(builder))
+
+	return builder.FinishedBytes()
+}
+
+func GetFlatEvent(builder *flatbuffers.Builder, kind string, bytes []byte) *flatgen.Event {
+	flatKind := builder.CreateByteString([]byte(kind))
+	flatBytes := builder.CreateByteVector(bytes)
+
+	flatgen.EventStart(builder)
+	flatgen.EventAddKind(builder, flatKind)
+	flatgen.EventAddData(builder, flatBytes)
+	builder.Finish(flatgen.EventEnd(builder))
+
+	return flatgen.GetRootAsEvent(builder.FinishedBytes(), 0)
+}
+
+func WaitServerIsReady(url string) {
+	for {
+		_, err := http.Get(url)
+		if err == nil {
+			return
+		}
+
+		time.Sleep(1 * time.Second)
 	}
 }

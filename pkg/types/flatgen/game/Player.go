@@ -7,29 +7,7 @@ import (
 )
 
 type Player struct {
-	_tab flatbuffers.Table
-}
-
-func GetRootAsPlayer(buf []byte, offset flatbuffers.UOffsetT) *Player {
-	n := flatbuffers.GetUOffsetT(buf[offset:])
-	x := &Player{}
-	x.Init(buf, n+offset)
-	return x
-}
-
-func FinishPlayerBuffer(builder *flatbuffers.Builder, offset flatbuffers.UOffsetT) {
-	builder.Finish(offset)
-}
-
-func GetSizePrefixedRootAsPlayer(buf []byte, offset flatbuffers.UOffsetT) *Player {
-	n := flatbuffers.GetUOffsetT(buf[offset+flatbuffers.SizeUint32:])
-	x := &Player{}
-	x.Init(buf, n+offset+flatbuffers.SizeUint32)
-	return x
-}
-
-func FinishSizePrefixedPlayerBuffer(builder *flatbuffers.Builder, offset flatbuffers.UOffsetT) {
-	builder.FinishSizePrefixed(offset)
+	_tab flatbuffers.Struct
 }
 
 func (rcv *Player) Init(buf []byte, i flatbuffers.UOffsetT) {
@@ -38,132 +16,74 @@ func (rcv *Player) Init(buf []byte, i flatbuffers.UOffsetT) {
 }
 
 func (rcv *Player) Table() flatbuffers.Table {
-	return rcv._tab
+	return rcv._tab.Table
 }
 
 func (rcv *Player) Id() int32 {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
-	if o != 0 {
-		return rcv._tab.GetInt32(o + rcv._tab.Pos)
-	}
-	return 0
+	return rcv._tab.GetInt32(rcv._tab.Pos + flatbuffers.UOffsetT(0))
 }
-
 func (rcv *Player) MutateId(n int32) bool {
-	return rcv._tab.MutateInt32Slot(4, n)
+	return rcv._tab.MutateInt32(rcv._tab.Pos+flatbuffers.UOffsetT(0), n)
 }
 
 func (rcv *Player) X() int32 {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
-	if o != 0 {
-		return rcv._tab.GetInt32(o + rcv._tab.Pos)
-	}
-	return 0
+	return rcv._tab.GetInt32(rcv._tab.Pos + flatbuffers.UOffsetT(4))
 }
-
 func (rcv *Player) MutateX(n int32) bool {
-	return rcv._tab.MutateInt32Slot(6, n)
+	return rcv._tab.MutateInt32(rcv._tab.Pos+flatbuffers.UOffsetT(4), n)
 }
 
 func (rcv *Player) Y() int32 {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
-	if o != 0 {
-		return rcv._tab.GetInt32(o + rcv._tab.Pos)
-	}
-	return 0
+	return rcv._tab.GetInt32(rcv._tab.Pos + flatbuffers.UOffsetT(8))
 }
-
 func (rcv *Player) MutateY(n int32) bool {
-	return rcv._tab.MutateInt32Slot(8, n)
+	return rcv._tab.MutateInt32(rcv._tab.Pos+flatbuffers.UOffsetT(8), n)
 }
 
 func (rcv *Player) Speed() int32 {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
-	if o != 0 {
-		return rcv._tab.GetInt32(o + rcv._tab.Pos)
-	}
-	return 0
+	return rcv._tab.GetInt32(rcv._tab.Pos + flatbuffers.UOffsetT(12))
 }
-
 func (rcv *Player) MutateSpeed(n int32) bool {
-	return rcv._tab.MutateInt32Slot(10, n)
+	return rcv._tab.MutateInt32(rcv._tab.Pos+flatbuffers.UOffsetT(12), n)
 }
 
 func (rcv *Player) MovingLeft() bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
-	if o != 0 {
-		return rcv._tab.GetBool(o + rcv._tab.Pos)
-	}
-	return false
+	return rcv._tab.GetBool(rcv._tab.Pos + flatbuffers.UOffsetT(16))
 }
-
 func (rcv *Player) MutateMovingLeft(n bool) bool {
-	return rcv._tab.MutateBoolSlot(12, n)
+	return rcv._tab.MutateBool(rcv._tab.Pos+flatbuffers.UOffsetT(16), n)
 }
 
 func (rcv *Player) MovingRight() bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
-	if o != 0 {
-		return rcv._tab.GetBool(o + rcv._tab.Pos)
-	}
-	return false
+	return rcv._tab.GetBool(rcv._tab.Pos + flatbuffers.UOffsetT(17))
 }
-
 func (rcv *Player) MutateMovingRight(n bool) bool {
-	return rcv._tab.MutateBoolSlot(14, n)
+	return rcv._tab.MutateBool(rcv._tab.Pos+flatbuffers.UOffsetT(17), n)
 }
 
 func (rcv *Player) MovingUp() bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
-	if o != 0 {
-		return rcv._tab.GetBool(o + rcv._tab.Pos)
-	}
-	return false
+	return rcv._tab.GetBool(rcv._tab.Pos + flatbuffers.UOffsetT(18))
 }
-
 func (rcv *Player) MutateMovingUp(n bool) bool {
-	return rcv._tab.MutateBoolSlot(16, n)
+	return rcv._tab.MutateBool(rcv._tab.Pos+flatbuffers.UOffsetT(18), n)
 }
 
 func (rcv *Player) MovingDown() bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(18))
-	if o != 0 {
-		return rcv._tab.GetBool(o + rcv._tab.Pos)
-	}
-	return false
+	return rcv._tab.GetBool(rcv._tab.Pos + flatbuffers.UOffsetT(19))
 }
-
 func (rcv *Player) MutateMovingDown(n bool) bool {
-	return rcv._tab.MutateBoolSlot(18, n)
+	return rcv._tab.MutateBool(rcv._tab.Pos+flatbuffers.UOffsetT(19), n)
 }
 
-func PlayerStart(builder *flatbuffers.Builder) {
-	builder.StartObject(8)
-}
-func PlayerAddId(builder *flatbuffers.Builder, id int32) {
-	builder.PrependInt32Slot(0, id, 0)
-}
-func PlayerAddX(builder *flatbuffers.Builder, x int32) {
-	builder.PrependInt32Slot(1, x, 0)
-}
-func PlayerAddY(builder *flatbuffers.Builder, y int32) {
-	builder.PrependInt32Slot(2, y, 0)
-}
-func PlayerAddSpeed(builder *flatbuffers.Builder, speed int32) {
-	builder.PrependInt32Slot(3, speed, 0)
-}
-func PlayerAddMovingLeft(builder *flatbuffers.Builder, movingLeft bool) {
-	builder.PrependBoolSlot(4, movingLeft, false)
-}
-func PlayerAddMovingRight(builder *flatbuffers.Builder, movingRight bool) {
-	builder.PrependBoolSlot(5, movingRight, false)
-}
-func PlayerAddMovingUp(builder *flatbuffers.Builder, movingUp bool) {
-	builder.PrependBoolSlot(6, movingUp, false)
-}
-func PlayerAddMovingDown(builder *flatbuffers.Builder, movingDown bool) {
-	builder.PrependBoolSlot(7, movingDown, false)
-}
-func PlayerEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
-	return builder.EndObject()
+func CreatePlayer(builder *flatbuffers.Builder, id int32, x int32, y int32, speed int32, movingLeft bool, movingRight bool, movingUp bool, movingDown bool) flatbuffers.UOffsetT {
+	builder.Prep(4, 20)
+	builder.PrependBool(movingDown)
+	builder.PrependBool(movingUp)
+	builder.PrependBool(movingRight)
+	builder.PrependBool(movingLeft)
+	builder.PrependInt32(speed)
+	builder.PrependInt32(y)
+	builder.PrependInt32(x)
+	builder.PrependInt32(id)
+	return builder.Offset()
 }

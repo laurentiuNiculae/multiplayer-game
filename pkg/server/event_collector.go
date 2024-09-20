@@ -32,9 +32,6 @@ func (elb *EventListBuilder) GetFlatEventList(generalEvents []*flatgen.Event) *f
 
 	rawEventList := make([]flatbuffers.UOffsetT, totalEventCount)
 	for i := 0; i < len(elb.events); i++ {
-		if len(elb.events[i].Kind()) == 0 {
-			fmt.Println("XD")
-		}
 		rawDataOffset := elb.builder.CreateByteVector(elb.events[i].Table().Bytes)
 
 		flatgen.RawEventStart(elb.builder)
