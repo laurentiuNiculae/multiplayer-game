@@ -4,6 +4,9 @@
 
 import * as flatbuffers from '../../flatbuffers/flatbuffers.js';
 
+import { EventKind } from '../../flatgen/game/event-kind.js';
+
+
 export class Event {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
@@ -22,11 +25,9 @@ static getSizePrefixedRootAsEvent(bb:flatbuffers.ByteBuffer, obj?:Event):Event {
   return (obj || new Event()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
-kind():string|null
-kind(optionalEncoding:flatbuffers.Encoding):string|Uint8Array|null
-kind(optionalEncoding?:any):string|Uint8Array|null {
+kind():EventKind {
   const offset = this.bb!.__offset(this.bb_pos, 4);
-  return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
+  return offset ? this.bb!.readUint8(this.bb_pos + offset) : EventKind.NilEvent;
 }
 
 data(index: number):number|null {
@@ -48,8 +49,8 @@ static startEvent(builder:flatbuffers.Builder) {
   builder.startObject(2);
 }
 
-static addKind(builder:flatbuffers.Builder, kindOffset:flatbuffers.Offset) {
-  builder.addFieldOffset(0, kindOffset, 0);
+static addKind(builder:flatbuffers.Builder, kind:EventKind) {
+  builder.addFieldInt8(0, kind, EventKind.NilEvent);
 }
 
 static addData(builder:flatbuffers.Builder, dataOffset:flatbuffers.Offset) {
@@ -73,9 +74,9 @@ static endEvent(builder:flatbuffers.Builder):flatbuffers.Offset {
   return offset;
 }
 
-static createEvent(builder:flatbuffers.Builder, kindOffset:flatbuffers.Offset, dataOffset:flatbuffers.Offset):flatbuffers.Offset {
+static createEvent(builder:flatbuffers.Builder, kind:EventKind, dataOffset:flatbuffers.Offset):flatbuffers.Offset {
   Event.startEvent(builder);
-  Event.addKind(builder, kindOffset);
+  Event.addKind(builder, kind);
   Event.addData(builder, dataOffset);
   return Event.endEvent(builder);
 }

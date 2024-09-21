@@ -74,9 +74,9 @@ func (game *GameServer) Start(ctx context.Context) {
 
 			game.EventQueue <- Event{
 				PlayerId: playerId,
-				Kind:     PlayerQuitKind,
+				Kind:     flatgen.EventKindPlayerQuit,
 				Conn:     wcon,
-				Data:     flatgen.GetRootAsPlayerQuit(utils.GetFlatPlayerQuit(builder, playerId), 0),
+				Data:     flatgen.GetRootAsPlayerQuit(utils.NewFlatPlayerQuit(builder, playerId).Table().Bytes, 0),
 			}
 
 			game.log.Infof("Player '%v' diconnected", playerId)
@@ -84,9 +84,9 @@ func (game *GameServer) Start(ctx context.Context) {
 
 		game.EventQueue <- Event{
 			PlayerId: playerId,
-			Kind:     PlayerHelloKind,
+			Kind:     flatgen.EventKindPlayerHello,
 			Conn:     wcon,
-			Data:     PlayerHello{Kind: PlayerHelloKind, Id: playerId},
+			Data:     PlayerHello{Kind: flatgen.EventKindPlayerHello, Id: playerId},
 		}
 
 		for {
@@ -157,11 +157,11 @@ func (game *GameServer) Tick() {
 	<-ticker.C
 
 	avgEventsPerTick := float64(0)
-	avgDataPerSecond := float64(0)
-	totalEvents := float64(0)
-	totalEventsPerSecond := float64(0)
-
-	start := time.Now()
+	avgDataSentPerPlayer := float64(0)
+	totalEventsSentAvg := float64(0)
+	totalEventsSentPerTick := float64(0)
+	maxDataSent := float64(0)
+	sendCount := float64(0)
 
 	for range ticker.C {
 		startTick := time.Now()
@@ -173,7 +173,7 @@ func (game *GameServer) Tick() {
 			event := <-game.EventQueue
 
 			switch event.Kind {
-			case PlayerHelloKind:
+			case flatgen.EventKindPlayerHello:
 				playerHello := event.Data.(PlayerHello)
 
 				newPlayer := PlayerWithSocket{
@@ -192,14 +192,14 @@ func (game *GameServer) Tick() {
 
 				builder := flatbuffers.NewBuilder(512)
 
-				eventData := utils.GetFlatPlayerHello(builder, newPlayer.Player)
-				eventBytes := utils.GetFlatEvent(builder, PlayerHelloKind, eventData).Table().Bytes
+				eventData := utils.NewFlatPlayerHello(builder, newPlayer.Player).Table().Bytes
+				eventBytes := utils.NewFlatEvent(builder, flatgen.EventKindPlayerHello, eventData).Table().Bytes
 
 				err := newPlayer.Conn.Write(ctx, websocket.MessageBinary, eventBytes)
 				if err != nil {
 					game.log.Errorf("err: %s\n", err.Error())
 				}
-			case PlayerHelloConfirmKind:
+			case flatgen.EventKindPlayerHelloConfirm:
 				helloResponse := event.Data.(*flatgen.PlayerHelloConfirm)
 
 				if helloResponse.Id() == int32(event.PlayerId) {
@@ -217,13 +217,13 @@ func (game *GameServer) Tick() {
 				for _, otherPlayer := range game.Players.All() {
 					builder2 := flatbuffers.NewBuilder(512)
 
-					flatOtherPlayerJoined := utils.GetFlatPlayerJoined(builder2, otherPlayer.Player)
-					flatOtherPlayerJoinedEvent := utils.GetFlatEvent(builder2, PlayerJoinedKind, flatOtherPlayerJoined)
+					flatOtherPlayerJoined := utils.NewFlatPlayerJoined(builder2, otherPlayer.Player).Table().Bytes
+					flatOtherPlayerJoinedEvent := utils.NewFlatEvent(builder2, flatgen.EventKindPlayerJoined, flatOtherPlayerJoined)
 					if otherPlayer.Id != newPlayer.Id {
 						game.EventCollector.AddEvent(newPlayer.Id, flatOtherPlayerJoinedEvent)
 					}
 				}
-			case PlayerQuitKind:
+			case flatgen.EventKindPlayerQuit:
 				playerQuit := event.Data.(*flatgen.PlayerQuit)
 
 				if playerQuit.Id() != int32(event.PlayerId) {
@@ -231,7 +231,7 @@ func (game *GameServer) Tick() {
 					game.log.Errorf("player '%s' tried to cheat", event.PlayerId)
 				}
 
-				playerQuitEvent := utils.GetFlatEvent(flatbuffers.NewBuilder(512), PlayerQuitKind,
+				playerQuitEvent := utils.NewFlatEvent(flatbuffers.NewBuilder(512), flatgen.EventKindPlayerQuit,
 					playerQuit.Table().Bytes)
 
 				game.Players.Delete(event.PlayerId)
@@ -241,7 +241,7 @@ func (game *GameServer) Tick() {
 					game.EventCollector.AddEvent(player.Id, playerQuitEvent)
 				}
 
-			case PlayerMovedKind:
+			case flatgen.EventKindPlayerMoved:
 				playerMoved := event.Data.(*flatgen.PlayerMoved)
 				newPlayerInfo := playerMoved.Player(nil)
 
@@ -272,29 +272,36 @@ func (game *GameServer) Tick() {
 			}
 		}
 
+		// TODO: move this into a EventCollector
 		// calculate all players that moved event and send it.
 		if len(playerMovedList) > 0 {
 			flatPlayerMovedList := utils.NewFlatPlayerMovedList(playerMovedBuilder, playerMovedList)
-			game.EventCollector.AddGeneralEvent(utils.NewFlatEvent(playerMovedBuilder, PlayerMovedListKind,
+			game.EventCollector.AddGeneralEvent(utils.NewFlatEvent(playerMovedBuilder, flatgen.EventKindPlayerMovedList,
 				flatPlayerMovedList.Table().Bytes))
 		}
 
 		if len(playerJoinedList) > 0 {
 			flatPlayerJoinedList := utils.NewFlatPlayerJoinedList(playerJoinedBuilder2, playerJoinedList)
-			game.EventCollector.AddGeneralEvent(utils.NewFlatEvent(playerJoinedBuilder2, PlayerJoinedListKind,
+			game.EventCollector.AddGeneralEvent(utils.NewFlatEvent(playerJoinedBuilder2, flatgen.EventKindPlayerJoinedList,
 				flatPlayerJoinedList.Table().Bytes))
 		}
 
+		i := float64(0)
+
 		// collect events here then send them.
 		for id, player := range game.Players.All() {
-			eventList := game.EventCollector.GetPlayerEventList(id)
+			eventList, _ := game.EventCollector.GetPlayerEventList(id)
 
 			if eventList != nil {
-				avgDataPerSecond += float64(len(eventList.Table().Bytes))
+				i++
+				sendCount++
+				avgDataSentPerPlayer += float64(len(eventList.Table().Bytes))
+				maxDataSent = max(maxDataSent, float64(len(eventList.Table().Bytes)))
 				player.Conn.Write(ctx, websocket.MessageBinary, eventList.Table().Bytes)
 			}
 		}
 
+		// TODO: Something to manage state, buffers and stuff like that.
 		game.EventCollector.Reset()
 		clear(playerMovedList)
 
@@ -308,6 +315,7 @@ func (game *GameServer) Tick() {
 		delta, previousTime = time.Since(previousTime), time.Now()
 
 		for i, player := range game.Players.All() {
+			// TODO: UpdateGameState()
 			movedDelta := delta.Seconds() * player.Speed
 
 			if player.MovingLeft && player.X-movedDelta >= 0 {
@@ -326,22 +334,26 @@ func (game *GameServer) Tick() {
 			game.Players.Set(i, player)
 		}
 
-		if timeI == 29 {
+		// TODO: Some sort of observability thing to print every X ticks
+		if timeI == ServerFPS-1 {
 			sort.Slice(tickTimeArr, func(i, j int) bool {
 				return tickTimeArr[i] < tickTimeArr[j]
 			})
 
-			game.log.Debugf("Tick: %06f  Avg-Events: %02f TotalEvents/s: %02f avgDataPerSecond: %02f", tickTimeArr[30/2], avgEventsPerTick, totalEventsPerSecond, avgDataPerSecond/1024/1024/time.Since(start).Seconds())
+			game.log.Debugf("Tick: %06f  Avg-Events: %02f avgDataSentPerPlayerPerTick: %f KB", tickTimeArr[30/2], avgEventsPerTick, avgDataSentPerPlayer/sendCount/1024)
 			PrintMemUsage(game.log)
 
 			timeI = 0
 			avgEventsPerTick = 0
+			totalEventsSentPerTick = 0
+			totalEventsSentAvg = 0
+			avgDataSentPerPlayer = 0
+			sendCount = 0
 		}
 
 		tickTimeArr[timeI] = time.Since(startTick).Seconds()
-		avgEventsPerTick += eventsPerTick / 30
-		totalEvents += eventsPerTick
-		totalEventsPerSecond = totalEvents / time.Since(start).Seconds()
+		avgEventsPerTick += eventsPerTick / float64(ServerFPS)
+		totalEventsSentAvg += totalEventsSentPerTick / float64(ServerFPS)
 		timeI++
 	}
 }

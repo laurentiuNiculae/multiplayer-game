@@ -41,19 +41,113 @@ func (rcv *BunicaEvent) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *BunicaEvent) Id() []byte {
+func (rcv *BunicaEvent) Kind() EventKind {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
-		return rcv._tab.ByteVector(o + rcv._tab.Pos)
+		return EventKind(rcv._tab.GetByte(o + rcv._tab.Pos))
 	}
-	return nil
+	return 0
+}
+
+func (rcv *BunicaEvent) MutateKind(n EventKind) bool {
+	return rcv._tab.MutateByteSlot(4, byte(n))
+}
+
+func (rcv *BunicaEvent) Id() int32 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
+	if o != 0 {
+		return rcv._tab.GetInt32(o + rcv._tab.Pos)
+	}
+	return 0
+}
+
+func (rcv *BunicaEvent) MutateId(n int32) bool {
+	return rcv._tab.MutateInt32Slot(6, n)
+}
+
+func (rcv *BunicaEvent) Bunica() int32 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	if o != 0 {
+		return rcv._tab.GetInt32(o + rcv._tab.Pos)
+	}
+	return 0
+}
+
+func (rcv *BunicaEvent) MutateBunica(n int32) bool {
+	return rcv._tab.MutateInt32Slot(8, n)
+}
+
+func (rcv *BunicaEvent) Bunica2() int32 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	if o != 0 {
+		return rcv._tab.GetInt32(o + rcv._tab.Pos)
+	}
+	return 0
+}
+
+func (rcv *BunicaEvent) MutateBunica2(n int32) bool {
+	return rcv._tab.MutateInt32Slot(10, n)
+}
+
+func (rcv *BunicaEvent) Bunica3() int32 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	if o != 0 {
+		return rcv._tab.GetInt32(o + rcv._tab.Pos)
+	}
+	return 0
+}
+
+func (rcv *BunicaEvent) MutateBunica3(n int32) bool {
+	return rcv._tab.MutateInt32Slot(12, n)
+}
+
+func (rcv *BunicaEvent) Bunica4() int32 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
+	if o != 0 {
+		return rcv._tab.GetInt32(o + rcv._tab.Pos)
+	}
+	return 0
+}
+
+func (rcv *BunicaEvent) MutateBunica4(n int32) bool {
+	return rcv._tab.MutateInt32Slot(14, n)
+}
+
+func (rcv *BunicaEvent) Bunica5() int32 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
+	if o != 0 {
+		return rcv._tab.GetInt32(o + rcv._tab.Pos)
+	}
+	return 0
+}
+
+func (rcv *BunicaEvent) MutateBunica5(n int32) bool {
+	return rcv._tab.MutateInt32Slot(16, n)
 }
 
 func BunicaEventStart(builder *flatbuffers.Builder) {
-	builder.StartObject(1)
+	builder.StartObject(7)
 }
-func BunicaEventAddId(builder *flatbuffers.Builder, id flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(id), 0)
+func BunicaEventAddKind(builder *flatbuffers.Builder, kind EventKind) {
+	builder.PrependByteSlot(0, byte(kind), 0)
+}
+func BunicaEventAddId(builder *flatbuffers.Builder, id int32) {
+	builder.PrependInt32Slot(1, id, 0)
+}
+func BunicaEventAddBunica(builder *flatbuffers.Builder, bunica int32) {
+	builder.PrependInt32Slot(2, bunica, 0)
+}
+func BunicaEventAddBunica2(builder *flatbuffers.Builder, bunica2 int32) {
+	builder.PrependInt32Slot(3, bunica2, 0)
+}
+func BunicaEventAddBunica3(builder *flatbuffers.Builder, bunica3 int32) {
+	builder.PrependInt32Slot(4, bunica3, 0)
+}
+func BunicaEventAddBunica4(builder *flatbuffers.Builder, bunica4 int32) {
+	builder.PrependInt32Slot(5, bunica4, 0)
+}
+func BunicaEventAddBunica5(builder *flatbuffers.Builder, bunica5 int32) {
+	builder.PrependInt32Slot(6, bunica5, 0)
 }
 func BunicaEventEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()

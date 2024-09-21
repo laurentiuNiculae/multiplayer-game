@@ -22,10 +22,10 @@ func (elb *EventListBuilder) AddEvent(event *flatgen.Event) error {
 	return nil
 }
 
-func (elb *EventListBuilder) GetFlatEventList(generalEvents []*flatgen.Event) *flatgen.EventList {
+func (elb *EventListBuilder) GetFlatEventList(generalEvents []*flatgen.Event) (*flatgen.EventList, int) {
 	totalEventCount := len(elb.events) + len(generalEvents)
 	if totalEventCount == 0 {
-		return nil
+		return nil, 0
 	}
 
 	elb.builderStarted = true
@@ -59,7 +59,7 @@ func (elb *EventListBuilder) GetFlatEventList(generalEvents []*flatgen.Event) *f
 	flatgen.EventListAddEvents(elb.builder, eventList)
 	elb.builder.Finish(flatgen.EventListEnd(elb.builder))
 
-	return flatgen.GetRootAsEventList(elb.builder.FinishedBytes(), 0)
+	return flatgen.GetRootAsEventList(elb.builder.FinishedBytes(), 0), totalEventCount
 }
 
 type EventCollector struct {
@@ -89,7 +89,7 @@ func (es *EventCollector) AddGeneralEvent(event *flatgen.Event) {
 	es.generalEvents = append(es.generalEvents, event)
 }
 
-func (es *EventCollector) GetPlayerEventList(playerId int) *flatgen.EventList {
+func (es *EventCollector) GetPlayerEventList(playerId int) (*flatgen.EventList, int) {
 	playerEventsBuilder, ok := es.playerEvents[playerId]
 	if !ok {
 		playerEventsBuilder = EventListBuilder{builder: flatbuffers.NewBuilder(512)} // TODO: Is this ok?

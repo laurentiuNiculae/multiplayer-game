@@ -4,6 +4,9 @@
 
 import * as flatbuffers from '../../flatbuffers/flatbuffers.js';
 
+import { EventKind } from '../../flatgen/game/event-kind.js';
+
+
 export class BunicaEvent {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
@@ -22,19 +25,71 @@ static getSizePrefixedRootAsBunicaEvent(bb:flatbuffers.ByteBuffer, obj?:BunicaEv
   return (obj || new BunicaEvent()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
-id():string|null
-id(optionalEncoding:flatbuffers.Encoding):string|Uint8Array|null
-id(optionalEncoding?:any):string|Uint8Array|null {
+kind():EventKind {
   const offset = this.bb!.__offset(this.bb_pos, 4);
-  return offset ? this.bb!.__string(this.bb_pos + offset, optionalEncoding) : null;
+  return offset ? this.bb!.readUint8(this.bb_pos + offset) : EventKind.NilEvent;
+}
+
+id():number {
+  const offset = this.bb!.__offset(this.bb_pos, 6);
+  return offset ? this.bb!.readInt32(this.bb_pos + offset) : 0;
+}
+
+bunica():number {
+  const offset = this.bb!.__offset(this.bb_pos, 8);
+  return offset ? this.bb!.readInt32(this.bb_pos + offset) : 0;
+}
+
+bunica2():number {
+  const offset = this.bb!.__offset(this.bb_pos, 10);
+  return offset ? this.bb!.readInt32(this.bb_pos + offset) : 0;
+}
+
+bunica3():number {
+  const offset = this.bb!.__offset(this.bb_pos, 12);
+  return offset ? this.bb!.readInt32(this.bb_pos + offset) : 0;
+}
+
+bunica4():number {
+  const offset = this.bb!.__offset(this.bb_pos, 14);
+  return offset ? this.bb!.readInt32(this.bb_pos + offset) : 0;
+}
+
+bunica5():number {
+  const offset = this.bb!.__offset(this.bb_pos, 16);
+  return offset ? this.bb!.readInt32(this.bb_pos + offset) : 0;
 }
 
 static startBunicaEvent(builder:flatbuffers.Builder) {
-  builder.startObject(1);
+  builder.startObject(7);
 }
 
-static addId(builder:flatbuffers.Builder, idOffset:flatbuffers.Offset) {
-  builder.addFieldOffset(0, idOffset, 0);
+static addKind(builder:flatbuffers.Builder, kind:EventKind) {
+  builder.addFieldInt8(0, kind, EventKind.NilEvent);
+}
+
+static addId(builder:flatbuffers.Builder, id:number) {
+  builder.addFieldInt32(1, id, 0);
+}
+
+static addBunica(builder:flatbuffers.Builder, bunica:number) {
+  builder.addFieldInt32(2, bunica, 0);
+}
+
+static addBunica2(builder:flatbuffers.Builder, bunica2:number) {
+  builder.addFieldInt32(3, bunica2, 0);
+}
+
+static addBunica3(builder:flatbuffers.Builder, bunica3:number) {
+  builder.addFieldInt32(4, bunica3, 0);
+}
+
+static addBunica4(builder:flatbuffers.Builder, bunica4:number) {
+  builder.addFieldInt32(5, bunica4, 0);
+}
+
+static addBunica5(builder:flatbuffers.Builder, bunica5:number) {
+  builder.addFieldInt32(6, bunica5, 0);
 }
 
 static endBunicaEvent(builder:flatbuffers.Builder):flatbuffers.Offset {
@@ -42,9 +97,15 @@ static endBunicaEvent(builder:flatbuffers.Builder):flatbuffers.Offset {
   return offset;
 }
 
-static createBunicaEvent(builder:flatbuffers.Builder, idOffset:flatbuffers.Offset):flatbuffers.Offset {
+static createBunicaEvent(builder:flatbuffers.Builder, kind:EventKind, id:number, bunica:number, bunica2:number, bunica3:number, bunica4:number, bunica5:number):flatbuffers.Offset {
   BunicaEvent.startBunicaEvent(builder);
-  BunicaEvent.addId(builder, idOffset);
+  BunicaEvent.addKind(builder, kind);
+  BunicaEvent.addId(builder, id);
+  BunicaEvent.addBunica(builder, bunica);
+  BunicaEvent.addBunica2(builder, bunica2);
+  BunicaEvent.addBunica3(builder, bunica3);
+  BunicaEvent.addBunica4(builder, bunica4);
+  BunicaEvent.addBunica5(builder, bunica5);
   return BunicaEvent.endBunicaEvent(builder);
 }
 }

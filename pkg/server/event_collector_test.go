@@ -20,7 +20,7 @@ func TestEventCollector(t *testing.T) {
 		builder2 := flatbuffers.NewBuilder(256)
 
 		playerJoined := utils.NewFlatPlayerJoined(builder2, types.Player{Id: 2, X: 20, Y: 69})
-		playerJoinedEvent := utils.NewFlatEvent(builder1, types.PlayerJoinedKind, playerJoined.Table().Bytes)
+		playerJoinedEvent := utils.NewFlatEvent(builder1, flatgen.EventKindPlayerJoined, playerJoined.Table().Bytes)
 
 		ec.AddEvent(2, playerJoinedEvent)
 	}
@@ -29,12 +29,12 @@ func TestEventCollector(t *testing.T) {
 		builder2 := flatbuffers.NewBuilder(256)
 
 		playerJoined := utils.NewFlatPlayerJoined(builder2, types.Player{Id: 2, X: 699, Y: 420})
-		playerJoinedEvent := utils.NewFlatEvent(builder1, types.PlayerJoinedKind, playerJoined.Table().Bytes)
+		playerJoinedEvent := utils.NewFlatEvent(builder1, flatgen.EventKindPlayerJoined, playerJoined.Table().Bytes)
 
 		ec.AddEvent(2, playerJoinedEvent)
 	}
 
-	playerEvents := ec.GetPlayerEventList(2)
+	playerEvents, _ := ec.GetPlayerEventList(2)
 
 	{
 		rawEvent := &flatgen.RawEvent{}
@@ -79,14 +79,14 @@ func TestEventCollectorGeneral(t *testing.T) {
 	}
 	flatPlayerMovedList := utils.NewFlatPlayerMovedList(flatbuffers.NewBuilder(512), playerMovedList)
 
-	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), "PlayerMovedList",
+	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), flatgen.EventKindPlayerMovedList,
 		flatPlayerMovedList.Table().Bytes))
-	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), "PlayerMovedList",
+	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), flatgen.EventKindPlayerMovedList,
 		flatPlayerMovedList.Table().Bytes))
 
 	ec.GetPlayerEventList(2)
 
-	playerEvents := ec.GetPlayerEventList(2)
+	playerEvents, _ := ec.GetPlayerEventList(2)
 	fmt.Printf("list.EventsLength(): %v\n", playerEvents.EventsLength())
 
 	rawEvent := &flatgen.RawEvent{}
@@ -123,14 +123,14 @@ func TestEventCollectorGeneralJoin(t *testing.T) {
 	}
 	flatPlayerJoinedList := utils.NewFlatPlayerJoinedList(flatbuffers.NewBuilder(512), playerJoinedList)
 
-	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), "PlayerJoinedList",
+	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), flatgen.EventKindPlayerJoinedList,
 		flatPlayerJoinedList.Table().Bytes))
-	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), "PlayerJoinedList",
+	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), flatgen.EventKindPlayerJoinedList,
 		flatPlayerJoinedList.Table().Bytes))
 
 	ec.GetPlayerEventList(2)
 
-	playerEvents := ec.GetPlayerEventList(2)
+	playerEvents, _ := ec.GetPlayerEventList(2)
 	fmt.Printf("list.EventsLength(): %v\n", playerEvents.EventsLength())
 
 	rawEvent := &flatgen.RawEvent{}
@@ -156,4 +156,83 @@ func TestEventCollectorGeneralJoin(t *testing.T) {
 	fmt.Println("Player X ", player.X())
 	fmt.Println("Player Y ", player.Y())
 	fmt.Println("Player Speed ", player.Speed())
+}
+
+func TestBunica(t *testing.T) {
+	builder := flatbuffers.NewBuilder(1024)
+
+	flatgen.BunicaEventStart(builder)
+	flatgen.BunicaEventAddKind(builder, flatgen.EventKindPlayerHello)
+	// flatgen.BunicaEventAddId(builder, 1)
+	builder.Finish(flatgen.BunicaEventEnd(builder))
+	bunica := builder.FinishedBytes()
+	fmt.Println("Bunica", len(bunica))
+
+	builder2 := flatbuffers.NewBuilder(1024)
+	bunicaEvent := utils.NewFlatEvent(builder2, flatgen.EventKindPlayerHello, bunica)
+	fmt.Printf("bunicaEvent: %v\n", len(bunicaEvent.Table().Bytes))
+	//
+	builder3 := flatbuffers.NewBuilder(1024)
+
+	rawData := builder3.CreateByteVector(bunicaEvent.Table().Bytes)
+
+	flatgen.RawEventStart(builder3)
+	flatgen.RawEventAddRawData(builder3, rawData)
+	// builder3.Finish()
+
+	// RawEvent := builder3.FinishedBytes()
+
+	// fmt.Printf("len(flatgen.GetRootAsRawEvent(RawEvent, 0).Table().Bytes): %v\n", len(flatgen.GetRootAsRawEvent(RawEvent, 0).Table().Bytes))
+
+	// builder4 := flatbuffers.NewBuilder(1024)
+	RawEvent := flatgen.RawEventEnd(builder3)
+	// rawEventOffset := builder4.CreateByteVector(RawEvent)
+
+	flatgen.EventListStartEventsVector(builder3, 1)
+	builder3.PrependUOffsetT(RawEvent) // This will set them the other way around but order is not a problem
+	eventVector := builder3.EndVector(1)
+
+	flatgen.EventListStart(builder3)
+	flatgen.EventListAddEvents(builder3, eventVector)
+	builder3.Finish(flatgen.EventListEnd(builder3))
+
+	FINAL := builder3.FinishedBytes()
+	fmt.Printf("len(FINAL): %v\n", len(FINAL))
+}
+
+func TestBunica2(t *testing.T) {
+	builder := flatbuffers.NewBuilder(1024)
+
+	flatgen.BunicaEventStart(builder)
+	flatgen.BunicaEventAddKind(builder, flatgen.EventKindPlayerMoved)
+	// flatgen.BunicaEventAddId(builder, 1)
+	builder.Finish(flatgen.BunicaEventEnd(builder))
+	bunica := builder.FinishedBytes()
+	fmt.Println("Bunica", len(bunica))
+
+	builder2 := flatbuffers.NewBuilder(1024)
+
+	rawData := builder2.CreateByteVector(bunica)
+
+	flatgen.RawEventStart(builder2)
+	flatgen.RawEventAddRawData(builder2, rawData)
+
+	RawEvent := flatgen.RawEventEnd(builder2)
+	// rawEventOffset := builder4.CreateByteVector(RawEvent)
+
+	flatgen.EventListStartEventsVector(builder2, 1)
+	builder2.PrependUOffsetT(RawEvent) // This will set them the other way around but order is not a problem
+	eventVector := builder2.EndVector(1)
+
+	flatgen.EventListStart(builder2)
+	flatgen.EventListAddEvents(builder2, eventVector)
+	builder2.Finish(flatgen.EventListEnd(builder2))
+
+	FINAL := builder2.FinishedBytes()
+	fmt.Printf("len(FINAL): %v\n", len(FINAL))
+
+	ev := &flatgen.RawEvent{}
+	flatgen.GetRootAsEventList(FINAL, 0).Events(ev, 0)
+
+	fmt.Printf("flatgen.GetRootAsKindHolder(ev.RawDataBytes(), 0).Kind().String(): %v\n", flatgen.GetRootAsKindHolder(ev.RawDataBytes(), 0).Kind().String())
 }

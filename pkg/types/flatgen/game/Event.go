@@ -41,12 +41,16 @@ func (rcv *Event) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *Event) Kind() []byte {
+func (rcv *Event) Kind() EventKind {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
-		return rcv._tab.ByteVector(o + rcv._tab.Pos)
+		return EventKind(rcv._tab.GetByte(o + rcv._tab.Pos))
 	}
-	return nil
+	return 0
+}
+
+func (rcv *Event) MutateKind(n EventKind) bool {
+	return rcv._tab.MutateByteSlot(4, byte(n))
 }
 
 func (rcv *Event) Data(j int) byte {
@@ -86,8 +90,8 @@ func (rcv *Event) MutateData(j int, n byte) bool {
 func EventStart(builder *flatbuffers.Builder) {
 	builder.StartObject(2)
 }
-func EventAddKind(builder *flatbuffers.Builder, kind flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(kind), 0)
+func EventAddKind(builder *flatbuffers.Builder, kind EventKind) {
+	builder.PrependByteSlot(0, byte(kind), 0)
 }
 func EventAddData(builder *flatbuffers.Builder, data flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(1, flatbuffers.UOffsetT(data), 0)

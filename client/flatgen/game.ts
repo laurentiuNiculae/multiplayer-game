@@ -4,7 +4,9 @@
 
 export { BunicaEvent } from './game/bunica-event.js';
 export { Event } from './game/event.js';
+export { EventKind } from './game/event-kind.js';
 export { EventList } from './game/event-list.js';
+export { KindHolder } from './game/kind-holder.js';
 export { Player } from './game/player.js';
 export { PlayerHello } from './game/player-hello.js';
 export { PlayerHelloConfirm } from './game/player-hello-confirm.js';

@@ -28,7 +28,7 @@ func GetMoveUpEvent(builder *flatbuffers.Builder, player Player) *flatgen.Event 
 
 	playerMovedBytes := utils.NewFlatPlayerMoved(builder, player).Table().Bytes
 
-	return utils.NewFlatEvent(builder, PlayerMovedKind, playerMovedBytes)
+	return utils.NewFlatEvent(builder, flatgen.EventKindPlayerMoved, playerMovedBytes)
 }
 func GetMoveDownEvent(builder *flatbuffers.Builder, player Player) *flatgen.Event {
 	player.MovingUp = false
@@ -38,7 +38,7 @@ func GetMoveDownEvent(builder *flatbuffers.Builder, player Player) *flatgen.Even
 
 	playerMovedBytes := utils.NewFlatPlayerMoved(builder, player).Table().Bytes
 
-	return utils.NewFlatEvent(builder, PlayerMovedKind, playerMovedBytes)
+	return utils.NewFlatEvent(builder, flatgen.EventKindPlayerMoved, playerMovedBytes)
 }
 func GetMoveLeftEvent(builder *flatbuffers.Builder, player Player) *flatgen.Event {
 	player.MovingUp = false
@@ -48,7 +48,7 @@ func GetMoveLeftEvent(builder *flatbuffers.Builder, player Player) *flatgen.Even
 
 	playerMovedBytes := utils.NewFlatPlayerMoved(builder, player).Table().Bytes
 
-	return utils.NewFlatEvent(builder, PlayerMovedKind, playerMovedBytes)
+	return utils.NewFlatEvent(builder, flatgen.EventKindPlayerMoved, playerMovedBytes)
 }
 func GetMoveRightEvent(builder *flatbuffers.Builder, player Player) *flatgen.Event {
 	player.MovingUp = false
@@ -58,7 +58,7 @@ func GetMoveRightEvent(builder *flatbuffers.Builder, player Player) *flatgen.Eve
 
 	playerMovedBytes := utils.NewFlatPlayerMoved(builder, player).Table().Bytes
 
-	return utils.NewFlatEvent(builder, PlayerMovedKind, playerMovedBytes)
+	return utils.NewFlatEvent(builder, flatgen.EventKindPlayerMoved, playerMovedBytes)
 }
 
 func GameLoop(ctx context.Context, conn *websocket.Conn, playerUpdateChan <-chan Player, Id int) {
@@ -180,7 +180,7 @@ func RunBot(ctx context.Context, wg *sync.WaitGroup, Id int) {
 
 	// Confirm the hello message
 	playerHelloConfirm := utils.NewFlatPlayerHelloConfirm(builder, myId)
-	helloConfirmEvent := utils.NewFlatEvent(builder, PlayerHelloConfirmKind, playerHelloConfirm.Table().Bytes)
+	helloConfirmEvent := utils.NewFlatEvent(builder, flatgen.EventKindPlayerHelloConfirm, playerHelloConfirm.Table().Bytes)
 
 	err = conn.Write(ctx, websocket.MessageBinary, helloConfirmEvent.Table().Bytes)
 	if err != nil {
@@ -215,7 +215,7 @@ func RunBot(ctx context.Context, wg *sync.WaitGroup, Id int) {
 				continue
 			}
 
-			if kind == PlayerJoinedKind {
+			if kind == flatgen.EventKindPlayerJoined {
 				playerJoined := data.(*flatgen.PlayerJoined)
 
 				player := &flatgen.Player{}
@@ -234,7 +234,7 @@ func RunBot(ctx context.Context, wg *sync.WaitGroup, Id int) {
 					fmt.Printf("Bot%v Confirmed Join: \n", Id)
 				}
 
-			} else if kind == PlayerJoinedListKind {
+			} else if kind == flatgen.EventKindPlayerJoinedList {
 				playerJoinedList := data.(*flatgen.PlayerJoinedList)
 				player := &flatgen.Player{}
 
@@ -256,7 +256,7 @@ func RunBot(ctx context.Context, wg *sync.WaitGroup, Id int) {
 						fmt.Printf("Bot%v Confirmed Join: \n", Id)
 					}
 				}
-			} else if kind == PlayerMovedListKind {
+			} else if kind == flatgen.EventKindPlayerMovedList {
 				playerMovedList := data.(*flatgen.PlayerMovedList)
 
 				player := &flatgen.Player{}
@@ -283,7 +283,7 @@ func RunBot(ctx context.Context, wg *sync.WaitGroup, Id int) {
 }
 
 func main() {
-	NumBots := 800
+	NumBots := 100
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

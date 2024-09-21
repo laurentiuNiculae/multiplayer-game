@@ -1,6 +1,8 @@
 package types
 
 import (
+	flatgen "test/pkg/types/flatgen/game"
+
 	"github.com/coder/websocket"
 )
 
@@ -20,48 +22,13 @@ type PlayerWithSocket struct {
 }
 
 type Event struct {
-	Kind     string
+	Kind     flatgen.EventKind
 	PlayerId int
 	Conn     *websocket.Conn
 	Data     any
 }
 
-// ----
-
-const (
-	PlayerHelloKind        = "PlayerHello"
-	PlayerHelloConfirmKind = "PlayerHelloConfirm"
-	PlayerQuitKind         = "PlayerQuit"
-	PlayerJoinedKind       = "PlayerJoined"
-	PlayerJoinedListKind   = "PlayerJoinedList"
-	PlayerMovedKind        = "PlayerMoved"
-	PlayerMovedListKind    = "PlayerMovedList"
-)
-
-type KindHolder struct {
-	Kind string `json:"Kind"`
-}
-
-type PlayerQuit struct {
-	Kind string
-	Id   int
-}
-
-type PlayerJoined struct {
-	Kind   string
-	Player Player
-}
-
 type PlayerHello struct {
-	Kind string
+	Kind flatgen.EventKind
 	Id   int
-}
-
-type PlayerMoved struct {
-	Kind        string
-	Player      Player
-	MovingLeft  bool
-	MovingRight bool
-	MovingUp    bool
-	MovingDown  bool
 }
