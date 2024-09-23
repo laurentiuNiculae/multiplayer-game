@@ -3,7 +3,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
 export { BunicaEvent } from './game/bunica-event.js';
-export { Event } from './game/event.js';
 export { EventKind } from './game/event-kind.js';
 export { EventList } from './game/event-list.js';
 export { KindHolder } from './game/kind-holder.js';

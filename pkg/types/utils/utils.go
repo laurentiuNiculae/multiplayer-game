@@ -10,20 +10,24 @@ import (
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 
-func NewFlatEvent(builder *flatbuffers.Builder, kind flatgen.EventKind, bytes []byte) *flatgen.Event {
-	flatBytes := builder.CreateByteVector(bytes)
+func NewEventHolder(kind flatgen.EventKind, event any) EventHolder {
+	flatbuffEventHolder, ok := event.(FlatbuffEventHolder)
+	if ok {
+		return &FlatEvent{Event: flatbuffEventHolder}
+	}
 
-	flatgen.EventStart(builder)
-	flatgen.EventAddKind(builder, kind)
-	flatgen.EventAddData(builder, flatBytes)
-	builder.Finish(flatgen.EventEnd(builder))
+	eventBytes, ok := event.([]byte)
+	if ok {
+		return &FlatEventBytes{EventKind: kind, Event: eventBytes}
+	}
 
-	return flatgen.GetRootAsEvent(builder.FinishedBytes(), 0)
+	return &EmptyEvent{}
 }
 
 func NewFlatPlayerHello(builder *flatbuffers.Builder, newPlayer Player) *flatgen.PlayerHello {
 	flatgen.PlayerHelloStart(builder)
 	flatgen.PlayerHelloAddId(builder, int32(newPlayer.Id))
+	flatgen.PlayerHelloAddKind(builder, flatgen.EventKindPlayerHello)
 	flatgen.FinishPlayerHelloBuffer(builder, flatgen.PlayerHelloEnd(builder))
 
 	return flatgen.GetRootAsPlayerHello(builder.FinishedBytes(), 0)
@@ -32,6 +36,7 @@ func NewFlatPlayerHello(builder *flatbuffers.Builder, newPlayer Player) *flatgen
 func NewFlatPlayerHelloConfirm(builder *flatbuffers.Builder, id int) *flatgen.PlayerHelloConfirm {
 	flatgen.PlayerHelloConfirmStart(builder)
 	flatgen.PlayerHelloConfirmAddId(builder, int32(id))
+	flatgen.PlayerHelloConfirmAddKind(builder, flatgen.EventKindPlayerHelloConfirm)
 	flatgen.FinishPlayerHelloConfirmBuffer(builder, flatgen.PlayerHelloConfirmEnd(builder))
 
 	return flatgen.GetRootAsPlayerHelloConfirm(builder.FinishedBytes(), 0)
@@ -40,6 +45,7 @@ func NewFlatPlayerHelloConfirm(builder *flatbuffers.Builder, id int) *flatgen.Pl
 func NewFlatPlayerQuit(builder *flatbuffers.Builder, playerId int) *flatgen.PlayerQuit {
 	flatgen.PlayerQuitStart(builder)
 	flatgen.PlayerQuitAddId(builder, int32(playerId))
+	flatgen.PlayerQuitAddKind(builder, flatgen.EventKindPlayerQuit)
 	flatgen.FinishPlayerQuitBuffer(builder, flatgen.PlayerQuitEnd(builder))
 
 	return flatgen.GetRootAsPlayerQuit(builder.FinishedBytes(), 0)
@@ -50,6 +56,7 @@ func NewFlatPlayerJoined(builder *flatbuffers.Builder, newPlayer Player) *flatge
 
 	flatgen.PlayerJoinedStart(builder)
 	flatgen.PlayerJoinedAddPlayer(builder, flatPlayer)
+	flatgen.PlayerJoinedAddKind(builder, flatgen.EventKindPlayerJoined)
 	flatgen.FinishPlayerJoinedBuffer(builder, flatgen.PlayerJoinedEnd(builder))
 
 	return flatgen.GetRootAsPlayerJoined(builder.FinishedBytes(), 0)
@@ -60,6 +67,7 @@ func NewFlatPlayerMoved(builder *flatbuffers.Builder, newPlayer Player) *flatgen
 
 	flatgen.PlayerMovedStart(builder)
 	flatgen.PlayerMovedAddPlayer(builder, flatPlayer)
+	flatgen.PlayerMovedAddKind(builder, flatgen.EventKindPlayerMoved)
 	flatgen.FinishPlayerMovedBuffer(builder, flatgen.PlayerMovedEnd(builder))
 
 	return flatgen.GetRootAsPlayerMoved(builder.FinishedBytes(), 0)
@@ -74,6 +82,7 @@ func NewFlatPlayerMovedList(builder *flatbuffers.Builder, movingPlayers []*flatg
 
 	flatgen.PlayerMovedListStart(builder)
 	flatgen.PlayerMovedListAddPlayers(builder, movingPlayersVecOffset)
+	flatgen.PlayerMovedListAddKind(builder, flatgen.EventKindPlayerMovedList)
 	flatgen.FinishPlayerMovedListBuffer(builder, flatgen.PlayerMovedListEnd(builder))
 
 	return flatgen.GetRootAsPlayerMovedList(builder.FinishedBytes(), 0)
@@ -88,6 +97,7 @@ func NewFlatPlayerJoinedList(builder *flatbuffers.Builder, joinedPlayers []Playe
 
 	flatgen.PlayerJoinedListStart(builder)
 	flatgen.PlayerJoinedListAddPlayers(builder, movingPlayersVecOffset)
+	flatgen.PlayerJoinedListAddKind(builder, flatgen.EventKindPlayerJoinedList)
 	flatgen.FinishPlayerJoinedListBuffer(builder, flatgen.PlayerJoinedListEnd(builder))
 
 	return flatgen.GetRootAsPlayerJoinedList(builder.FinishedBytes(), 0)
@@ -120,8 +130,7 @@ func NewFlatPlayerFromFlat(builder *flatbuffers.Builder, newPlayer *flatgen.Play
 }
 
 func ParseEventBytes(data []byte) (eventKind flatgen.EventKind, eventData any, err error) {
-	flatEvent := flatgen.GetRootAsEvent(data, 0)
-	eventKind = flatEvent.Kind()
+	kindHolder := flatgen.GetRootAsKindHolder(data, 0)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -129,37 +138,39 @@ func ParseEventBytes(data []byte) (eventKind flatgen.EventKind, eventData any, e
 		}
 	}()
 
-	switch eventKind {
+	eventKind = kindHolder.Kind()
+
+	switch kindHolder.Kind() {
 	case flatgen.EventKindPlayerHello:
-		flatPlayerHello := flatgen.GetRootAsPlayerHello(flatEvent.DataBytes(), 0)
+		flatPlayerHello := flatgen.GetRootAsPlayerHello(data, 0)
 
 		return eventKind, flatPlayerHello, nil
 	case flatgen.EventKindPlayerHelloConfirm:
-		flatPlayerHelloConfirm := flatgen.GetRootAsPlayerHelloConfirm(flatEvent.DataBytes(), 0)
+		flatPlayerHelloConfirm := flatgen.GetRootAsPlayerHelloConfirm(data, 0)
 
 		return eventKind, flatPlayerHelloConfirm, nil
 	case flatgen.EventKindPlayerQuit:
-		flatPlayerQuit := flatgen.GetRootAsPlayerQuit(flatEvent.DataBytes(), 0)
+		flatPlayerQuit := flatgen.GetRootAsPlayerQuit(data, 0)
 
 		return eventKind, flatPlayerQuit, nil
 	case flatgen.EventKindPlayerJoined:
-		flatPlayerJoined := flatgen.GetRootAsPlayerJoined(flatEvent.DataBytes(), 0)
+		flatPlayerJoined := flatgen.GetRootAsPlayerJoined(data, 0)
 
 		return eventKind, flatPlayerJoined, nil
 	case flatgen.EventKindPlayerJoinedList:
-		flatPlayerJoinedList := flatgen.GetRootAsPlayerJoinedList(flatEvent.DataBytes(), 0)
+		flatPlayerJoinedList := flatgen.GetRootAsPlayerJoinedList(data, 0)
 
 		return eventKind, flatPlayerJoinedList, nil
 	case flatgen.EventKindPlayerMoved:
-		flatPlayerMoved := flatgen.GetRootAsPlayerMoved(flatEvent.DataBytes(), 0)
+		flatPlayerMoved := flatgen.GetRootAsPlayerMoved(data, 0)
 
 		return eventKind, flatPlayerMoved, nil
 	case flatgen.EventKindPlayerMovedList:
-		flatPlayerMovedList := flatgen.GetRootAsPlayerMovedList(flatEvent.DataBytes(), 0)
+		flatPlayerMovedList := flatgen.GetRootAsPlayerMovedList(data, 0)
 
 		return eventKind, flatPlayerMovedList, nil
 	default:
-		return 0, nil, fmt.Errorf("ERROR: bogus-amogus kind '%s'", string(flatEvent.Kind()))
+		return 0, nil, fmt.Errorf("ERROR: bogus-amogus kind '%s'", flatgen.EnumNamesEventKind[kindHolder.Kind()])
 	}
 }
 

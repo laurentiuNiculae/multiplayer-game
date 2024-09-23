@@ -16,20 +16,18 @@ func TestEventCollector(t *testing.T) {
 	ec := server.NewEventCollector()
 
 	{
-		builder1 := flatbuffers.NewBuilder(256)
 		builder2 := flatbuffers.NewBuilder(256)
 
 		playerJoined := utils.NewFlatPlayerJoined(builder2, types.Player{Id: 2, X: 20, Y: 69})
-		playerJoinedEvent := utils.NewFlatEvent(builder1, flatgen.EventKindPlayerJoined, playerJoined.Table().Bytes)
+		playerJoinedEvent := utils.NewEventHolder(flatgen.EventKindPlayerJoined, playerJoined)
 
 		ec.AddEvent(2, playerJoinedEvent)
 	}
 	{
-		builder1 := flatbuffers.NewBuilder(256)
 		builder2 := flatbuffers.NewBuilder(256)
 
 		playerJoined := utils.NewFlatPlayerJoined(builder2, types.Player{Id: 2, X: 699, Y: 420})
-		playerJoinedEvent := utils.NewFlatEvent(builder1, flatgen.EventKindPlayerJoined, playerJoined.Table().Bytes)
+		playerJoinedEvent := utils.NewEventHolder(flatgen.EventKindPlayerJoined, playerJoined)
 
 		ec.AddEvent(2, playerJoinedEvent)
 	}
@@ -43,11 +41,11 @@ func TestEventCollector(t *testing.T) {
 
 		playerEvents.Events(rawEvent, 0)
 
-		event := flatgen.GetRootAsEvent(rawEvent.RawDataBytes(), 0)
+		kindHolder := flatgen.GetRootAsKindHolder(rawEvent.RawDataBytes(), 0)
 
-		fmt.Println(string(event.Kind()))
+		fmt.Println(flatgen.EnumNamesEventKind[kindHolder.Kind()])
 
-		playerJoined2 := flatgen.GetRootAsPlayerJoined(event.DataBytes(), 0)
+		playerJoined2 := flatgen.GetRootAsPlayerJoined(rawEvent.RawDataBytes(), 0)
 		fmt.Println("Player id ", playerJoined2.Player(nil).Id())
 		fmt.Println("Player X ", playerJoined2.Player(nil).X())
 		fmt.Println("Player Y ", playerJoined2.Player(nil).Y())
@@ -59,11 +57,11 @@ func TestEventCollector(t *testing.T) {
 
 		playerEvents.Events(rawEvent, 1)
 
-		event := flatgen.GetRootAsEvent(rawEvent.RawDataBytes(), 0)
+		kindHolder := flatgen.GetRootAsKindHolder(rawEvent.RawDataBytes(), 0)
 
-		fmt.Println(string(event.Kind()))
+		fmt.Println(flatgen.EnumNamesEventKind[kindHolder.Kind()])
 
-		playerJoined2 := flatgen.GetRootAsPlayerJoined(event.DataBytes(), 0)
+		playerJoined2 := flatgen.GetRootAsPlayerJoined(rawEvent.RawDataBytes(), 0)
 		fmt.Println("Player id ", playerJoined2.Player(nil).Id())
 		fmt.Println("Player X ", playerJoined2.Player(nil).X())
 		fmt.Println("Player Y ", playerJoined2.Player(nil).Y())
@@ -79,12 +77,8 @@ func TestEventCollectorGeneral(t *testing.T) {
 	}
 	flatPlayerMovedList := utils.NewFlatPlayerMovedList(flatbuffers.NewBuilder(512), playerMovedList)
 
-	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), flatgen.EventKindPlayerMovedList,
-		flatPlayerMovedList.Table().Bytes))
-	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), flatgen.EventKindPlayerMovedList,
-		flatPlayerMovedList.Table().Bytes))
-
-	ec.GetPlayerEventList(2)
+	ec.AddGeneralEvent(utils.NewEventHolder(flatgen.EventKindPlayerMoved, flatPlayerMovedList))
+	ec.AddGeneralEvent(utils.NewEventHolder(flatgen.EventKindPlayerMoved, flatPlayerMovedList))
 
 	playerEvents, _ := ec.GetPlayerEventList(2)
 	fmt.Printf("list.EventsLength(): %v\n", playerEvents.EventsLength())
@@ -92,11 +86,11 @@ func TestEventCollectorGeneral(t *testing.T) {
 	rawEvent := &flatgen.RawEvent{}
 	playerEvents.Events(rawEvent, 0)
 
-	event := flatgen.GetRootAsEvent(rawEvent.RawDataBytes(), 0)
+	kindHolder := flatgen.GetRootAsKindHolder(rawEvent.RawDataBytes(), 0)
 
-	fmt.Println(string(event.Kind()))
+	fmt.Println(flatgen.EnumNamesEventKind[kindHolder.Kind()])
 
-	playerMoved := flatgen.GetRootAsPlayerMovedList(event.DataBytes(), 0)
+	playerMoved := flatgen.GetRootAsPlayerMovedList(rawEvent.RawDataBytes(), 0)
 
 	player := &flatgen.Player{}
 	playerMoved.Players(player, 0)
@@ -123,10 +117,8 @@ func TestEventCollectorGeneralJoin(t *testing.T) {
 	}
 	flatPlayerJoinedList := utils.NewFlatPlayerJoinedList(flatbuffers.NewBuilder(512), playerJoinedList)
 
-	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), flatgen.EventKindPlayerJoinedList,
-		flatPlayerJoinedList.Table().Bytes))
-	ec.AddGeneralEvent(utils.NewFlatEvent(flatbuffers.NewBuilder(512), flatgen.EventKindPlayerJoinedList,
-		flatPlayerJoinedList.Table().Bytes))
+	ec.AddGeneralEvent(utils.NewEventHolder(flatgen.EventKindPlayerJoinedList, flatPlayerJoinedList))
+	ec.AddGeneralEvent(utils.NewEventHolder(flatgen.EventKindPlayerJoinedList, flatPlayerJoinedList))
 
 	ec.GetPlayerEventList(2)
 
@@ -136,11 +128,11 @@ func TestEventCollectorGeneralJoin(t *testing.T) {
 	rawEvent := &flatgen.RawEvent{}
 	playerEvents.Events(rawEvent, 0)
 
-	event := flatgen.GetRootAsEvent(rawEvent.RawDataBytes(), 0)
+	kindHolder := flatgen.GetRootAsKindHolder(rawEvent.RawDataBytes(), 0)
 
-	fmt.Println(string(event.Kind()))
+	fmt.Println(flatgen.EnumNamesEventKind[kindHolder.Kind()])
 
-	playerMoved := flatgen.GetRootAsPlayerJoinedList(event.DataBytes(), 0)
+	playerMoved := flatgen.GetRootAsPlayerJoinedList(rawEvent.RawDataBytes(), 0)
 
 	player := &flatgen.Player{}
 	playerMoved.Players(player, 0)
@@ -168,13 +160,11 @@ func TestBunica(t *testing.T) {
 	bunica := builder.FinishedBytes()
 	fmt.Println("Bunica", len(bunica))
 
-	builder2 := flatbuffers.NewBuilder(1024)
-	bunicaEvent := utils.NewFlatEvent(builder2, flatgen.EventKindPlayerHello, bunica)
-	fmt.Printf("bunicaEvent: %v\n", len(bunicaEvent.Table().Bytes))
+	fmt.Printf("bunicaEvent: %v\n", len(bunica))
 	//
 	builder3 := flatbuffers.NewBuilder(1024)
 
-	rawData := builder3.CreateByteVector(bunicaEvent.Table().Bytes)
+	rawData := builder3.CreateByteVector(bunica)
 
 	flatgen.RawEventStart(builder3)
 	flatgen.RawEventAddRawData(builder3, rawData)

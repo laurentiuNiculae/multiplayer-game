@@ -33,36 +33,38 @@ struct Player {
 }
 
 table PlayerQuit {
+    kind: EventKind;
 	id: int;
 }
 
 table PlayerJoined {
+    kind: EventKind;
 	player: Player;
 }
 
 table PlayerJoinedList {
+    kind: EventKind;
 	players: [Player];
 }
 
 table PlayerHello {
+    kind: EventKind;
 	id: int;
 }
 
 table PlayerHelloConfirm {
+    kind: EventKind;
 	id: int;
 }
 
 table PlayerMovedList {
+    kind: EventKind;
     players: [Player];
 }
 
 table PlayerMoved {
-	player: Player;
-}
-
-table Event {
     kind: EventKind;
-    data: [ubyte];
+	player: Player;
 }
 
 table KindHolder {

@@ -176,6 +176,11 @@ func (game *GameServer) Tick() {
 			case flatgen.EventKindPlayerHello:
 				playerHello := event.Data.(PlayerHello)
 
+				if playerHello.Id != event.PlayerId {
+					event.Conn.CloseNow()
+					game.log.Errorf("player '%s' tried to cheat", event.PlayerId)
+				}
+
 				newPlayer := PlayerWithSocket{
 					Conn: event.Conn,
 					Player: Player{
@@ -193,9 +198,8 @@ func (game *GameServer) Tick() {
 				builder := flatbuffers.NewBuilder(512)
 
 				eventData := utils.NewFlatPlayerHello(builder, newPlayer.Player).Table().Bytes
-				eventBytes := utils.NewFlatEvent(builder, flatgen.EventKindPlayerHello, eventData).Table().Bytes
 
-				err := newPlayer.Conn.Write(ctx, websocket.MessageBinary, eventBytes)
+				err := newPlayer.Conn.Write(ctx, websocket.MessageBinary, eventData)
 				if err != nil {
 					game.log.Errorf("err: %s\n", err.Error())
 				}
@@ -218,7 +222,8 @@ func (game *GameServer) Tick() {
 					builder2 := flatbuffers.NewBuilder(512)
 
 					flatOtherPlayerJoined := utils.NewFlatPlayerJoined(builder2, otherPlayer.Player).Table().Bytes
-					flatOtherPlayerJoinedEvent := utils.NewFlatEvent(builder2, flatgen.EventKindPlayerJoined, flatOtherPlayerJoined)
+					flatOtherPlayerJoinedEvent := utils.NewEventHolder(flatgen.EventKindPlayerJoined, flatOtherPlayerJoined)
+					// flatOtherPlayerJoinedEvent := utils.NewFlatEvent(builder2, flatgen.EventKindPlayerJoined, flatOtherPlayerJoined)
 					if otherPlayer.Id != newPlayer.Id {
 						game.EventCollector.AddEvent(newPlayer.Id, flatOtherPlayerJoinedEvent)
 					}
@@ -231,8 +236,7 @@ func (game *GameServer) Tick() {
 					game.log.Errorf("player '%s' tried to cheat", event.PlayerId)
 				}
 
-				playerQuitEvent := utils.NewFlatEvent(flatbuffers.NewBuilder(512), flatgen.EventKindPlayerQuit,
-					playerQuit.Table().Bytes)
+				playerQuitEvent := utils.NewEventHolder(flatgen.EventKindPlayerQuit, playerQuit)
 
 				game.Players.Delete(event.PlayerId)
 				game.EventCollector.RemovePlayer(event.PlayerId)
@@ -246,8 +250,8 @@ func (game *GameServer) Tick() {
 				newPlayerInfo := playerMoved.Player(nil)
 
 				if newPlayerInfo.Id() != int32(event.PlayerId) {
-					event.Conn.CloseNow()
-					game.log.Errorf("player '%s' tried to cheat", event.PlayerId)
+					event.Conn.Close(websocket.StatusNormalClosure, "Cheating!")
+					game.log.Errorf("player '%v' tried to cheat, expected id '%v' but got '%v'", event.PlayerId, event.PlayerId, newPlayerInfo.Id())
 				}
 
 				player, _ := game.Players.Get(int(newPlayerInfo.Id())) // TODO _
@@ -276,14 +280,12 @@ func (game *GameServer) Tick() {
 		// calculate all players that moved event and send it.
 		if len(playerMovedList) > 0 {
 			flatPlayerMovedList := utils.NewFlatPlayerMovedList(playerMovedBuilder, playerMovedList)
-			game.EventCollector.AddGeneralEvent(utils.NewFlatEvent(playerMovedBuilder, flatgen.EventKindPlayerMovedList,
-				flatPlayerMovedList.Table().Bytes))
+			game.EventCollector.AddGeneralEvent(utils.NewEventHolder(flatgen.EventKindPlayerMovedList, flatPlayerMovedList))
 		}
 
 		if len(playerJoinedList) > 0 {
 			flatPlayerJoinedList := utils.NewFlatPlayerJoinedList(playerJoinedBuilder2, playerJoinedList)
-			game.EventCollector.AddGeneralEvent(utils.NewFlatEvent(playerJoinedBuilder2, flatgen.EventKindPlayerJoinedList,
-				flatPlayerJoinedList.Table().Bytes))
+			game.EventCollector.AddGeneralEvent(utils.NewEventHolder(flatgen.EventKindPlayerJoinedList, flatPlayerJoinedList))
 		}
 
 		i := float64(0)
@@ -297,7 +299,8 @@ func (game *GameServer) Tick() {
 				sendCount++
 				avgDataSentPerPlayer += float64(len(eventList.Table().Bytes))
 				maxDataSent = max(maxDataSent, float64(len(eventList.Table().Bytes)))
-				player.Conn.Write(ctx, websocket.MessageBinary, eventList.Table().Bytes)
+				writeTo(ctx, player, eventList.Table().Bytes)
+				// player.Conn.Write(ctx, websocket.MessageBinary, eventList.Table().Bytes)
 			}
 		}
 
@@ -356,6 +359,16 @@ func (game *GameServer) Tick() {
 		totalEventsSentAvg += totalEventsSentPerTick / float64(ServerFPS)
 		timeI++
 	}
+}
+
+func writeTo(ctx context.Context, player PlayerWithSocket, b []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			return
+		}
+	}()
+
+	player.Conn.Write(ctx, websocket.MessageBinary, b)
 }
 
 func (game *GameServer) NotifyAll(msg []byte) {

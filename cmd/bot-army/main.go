@@ -20,45 +20,37 @@ var ServerFPT = 30
 var WorldWidth = float64(800 * 2)
 var WorldHeight = float64(600 * 2)
 
-func GetMoveUpEvent(builder *flatbuffers.Builder, player Player) *flatgen.Event {
+func GetMoveUpEvent(builder *flatbuffers.Builder, player Player) *flatgen.PlayerMoved {
 	player.MovingUp = true
 	player.MovingDown = false
 	player.MovingLeft = false
 	player.MovingRight = false
 
-	playerMovedBytes := utils.NewFlatPlayerMoved(builder, player).Table().Bytes
-
-	return utils.NewFlatEvent(builder, flatgen.EventKindPlayerMoved, playerMovedBytes)
+	return utils.NewFlatPlayerMoved(builder, player)
 }
-func GetMoveDownEvent(builder *flatbuffers.Builder, player Player) *flatgen.Event {
+func GetMoveDownEvent(builder *flatbuffers.Builder, player Player) *flatgen.PlayerMoved {
 	player.MovingUp = false
 	player.MovingDown = true
 	player.MovingLeft = false
 	player.MovingRight = false
 
-	playerMovedBytes := utils.NewFlatPlayerMoved(builder, player).Table().Bytes
-
-	return utils.NewFlatEvent(builder, flatgen.EventKindPlayerMoved, playerMovedBytes)
+	return utils.NewFlatPlayerMoved(builder, player)
 }
-func GetMoveLeftEvent(builder *flatbuffers.Builder, player Player) *flatgen.Event {
+func GetMoveLeftEvent(builder *flatbuffers.Builder, player Player) *flatgen.PlayerMoved {
 	player.MovingUp = false
 	player.MovingDown = false
 	player.MovingLeft = true
 	player.MovingRight = false
 
-	playerMovedBytes := utils.NewFlatPlayerMoved(builder, player).Table().Bytes
-
-	return utils.NewFlatEvent(builder, flatgen.EventKindPlayerMoved, playerMovedBytes)
+	return utils.NewFlatPlayerMoved(builder, player)
 }
-func GetMoveRightEvent(builder *flatbuffers.Builder, player Player) *flatgen.Event {
+func GetMoveRightEvent(builder *flatbuffers.Builder, player Player) *flatgen.PlayerMoved {
 	player.MovingUp = false
 	player.MovingDown = false
 	player.MovingLeft = false
 	player.MovingRight = true
 
-	playerMovedBytes := utils.NewFlatPlayerMoved(builder, player).Table().Bytes
-
-	return utils.NewFlatEvent(builder, flatgen.EventKindPlayerMoved, playerMovedBytes)
+	return utils.NewFlatPlayerMoved(builder, player)
 }
 
 func GameLoop(ctx context.Context, conn *websocket.Conn, playerUpdateChan <-chan Player, Id int) {
@@ -180,9 +172,8 @@ func RunBot(ctx context.Context, wg *sync.WaitGroup, Id int) {
 
 	// Confirm the hello message
 	playerHelloConfirm := utils.NewFlatPlayerHelloConfirm(builder, myId)
-	helloConfirmEvent := utils.NewFlatEvent(builder, flatgen.EventKindPlayerHelloConfirm, playerHelloConfirm.Table().Bytes)
 
-	err = conn.Write(ctx, websocket.MessageBinary, helloConfirmEvent.Table().Bytes)
+	err = conn.Write(ctx, websocket.MessageBinary, playerHelloConfirm.Table().Bytes)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -283,7 +274,7 @@ func RunBot(ctx context.Context, wg *sync.WaitGroup, Id int) {
 }
 
 func main() {
-	NumBots := 100
+	NumBots := 800
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

@@ -41,8 +41,20 @@ func (rcv *PlayerJoined) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *PlayerJoined) Player(obj *Player) *Player {
+func (rcv *PlayerJoined) Kind() EventKind {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
+	if o != 0 {
+		return EventKind(rcv._tab.GetByte(o + rcv._tab.Pos))
+	}
+	return 0
+}
+
+func (rcv *PlayerJoined) MutateKind(n EventKind) bool {
+	return rcv._tab.MutateByteSlot(4, byte(n))
+}
+
+func (rcv *PlayerJoined) Player(obj *Player) *Player {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		x := o + rcv._tab.Pos
 		if obj == nil {
@@ -55,10 +67,13 @@ func (rcv *PlayerJoined) Player(obj *Player) *Player {
 }
 
 func PlayerJoinedStart(builder *flatbuffers.Builder) {
-	builder.StartObject(1)
+	builder.StartObject(2)
+}
+func PlayerJoinedAddKind(builder *flatbuffers.Builder, kind EventKind) {
+	builder.PrependByteSlot(0, byte(kind), 0)
 }
 func PlayerJoinedAddPlayer(builder *flatbuffers.Builder, player flatbuffers.UOffsetT) {
-	builder.PrependStructSlot(0, flatbuffers.UOffsetT(player), 0)
+	builder.PrependStructSlot(1, flatbuffers.UOffsetT(player), 0)
 }
 func PlayerJoinedEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()

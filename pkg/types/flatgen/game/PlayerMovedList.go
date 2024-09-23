@@ -41,8 +41,20 @@ func (rcv *PlayerMovedList) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *PlayerMovedList) Players(obj *Player, j int) bool {
+func (rcv *PlayerMovedList) Kind() EventKind {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
+	if o != 0 {
+		return EventKind(rcv._tab.GetByte(o + rcv._tab.Pos))
+	}
+	return 0
+}
+
+func (rcv *PlayerMovedList) MutateKind(n EventKind) bool {
+	return rcv._tab.MutateByteSlot(4, byte(n))
+}
+
+func (rcv *PlayerMovedList) Players(obj *Player, j int) bool {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		x := rcv._tab.Vector(o)
 		x += flatbuffers.UOffsetT(j) * 20
@@ -53,7 +65,7 @@ func (rcv *PlayerMovedList) Players(obj *Player, j int) bool {
 }
 
 func (rcv *PlayerMovedList) PlayersLength() int {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		return rcv._tab.VectorLen(o)
 	}
@@ -61,10 +73,13 @@ func (rcv *PlayerMovedList) PlayersLength() int {
 }
 
 func PlayerMovedListStart(builder *flatbuffers.Builder) {
-	builder.StartObject(1)
+	builder.StartObject(2)
+}
+func PlayerMovedListAddKind(builder *flatbuffers.Builder, kind EventKind) {
+	builder.PrependByteSlot(0, byte(kind), 0)
 }
 func PlayerMovedListAddPlayers(builder *flatbuffers.Builder, players flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(players), 0)
+	builder.PrependUOffsetTSlot(1, flatbuffers.UOffsetT(players), 0)
 }
 func PlayerMovedListStartPlayersVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(20, numElems, 4)

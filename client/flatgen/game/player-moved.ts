@@ -4,6 +4,7 @@
 
 import * as flatbuffers from '../../flatbuffers/flatbuffers.js';
 
+import { EventKind } from '../../flatgen/game/event-kind.js';
 import { Player } from '../../flatgen/game/player.js';
 
 
@@ -25,17 +26,26 @@ static getSizePrefixedRootAsPlayerMoved(bb:flatbuffers.ByteBuffer, obj?:PlayerMo
   return (obj || new PlayerMoved()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
-player(obj?:Player):Player|null {
+kind():EventKind {
   const offset = this.bb!.__offset(this.bb_pos, 4);
+  return offset ? this.bb!.readUint8(this.bb_pos + offset) : EventKind.NilEvent;
+}
+
+player(obj?:Player):Player|null {
+  const offset = this.bb!.__offset(this.bb_pos, 6);
   return offset ? (obj || new Player()).__init(this.bb_pos + offset, this.bb!) : null;
 }
 
 static startPlayerMoved(builder:flatbuffers.Builder) {
-  builder.startObject(1);
+  builder.startObject(2);
+}
+
+static addKind(builder:flatbuffers.Builder, kind:EventKind) {
+  builder.addFieldInt8(0, kind, EventKind.NilEvent);
 }
 
 static addPlayer(builder:flatbuffers.Builder, playerOffset:flatbuffers.Offset) {
-  builder.addFieldStruct(0, playerOffset, 0);
+  builder.addFieldStruct(1, playerOffset, 0);
 }
 
 static endPlayerMoved(builder:flatbuffers.Builder):flatbuffers.Offset {
@@ -43,9 +53,4 @@ static endPlayerMoved(builder:flatbuffers.Builder):flatbuffers.Offset {
   return offset;
 }
 
-static createPlayerMoved(builder:flatbuffers.Builder, playerOffset:flatbuffers.Offset):flatbuffers.Offset {
-  PlayerMoved.startPlayerMoved(builder);
-  PlayerMoved.addPlayer(builder, playerOffset);
-  return PlayerMoved.endPlayerMoved(builder);
-}
 }

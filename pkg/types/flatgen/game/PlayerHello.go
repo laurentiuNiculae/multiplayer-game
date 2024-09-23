@@ -41,8 +41,20 @@ func (rcv *PlayerHello) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *PlayerHello) Id() int32 {
+func (rcv *PlayerHello) Kind() EventKind {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
+	if o != 0 {
+		return EventKind(rcv._tab.GetByte(o + rcv._tab.Pos))
+	}
+	return 0
+}
+
+func (rcv *PlayerHello) MutateKind(n EventKind) bool {
+	return rcv._tab.MutateByteSlot(4, byte(n))
+}
+
+func (rcv *PlayerHello) Id() int32 {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		return rcv._tab.GetInt32(o + rcv._tab.Pos)
 	}
@@ -50,14 +62,17 @@ func (rcv *PlayerHello) Id() int32 {
 }
 
 func (rcv *PlayerHello) MutateId(n int32) bool {
-	return rcv._tab.MutateInt32Slot(4, n)
+	return rcv._tab.MutateInt32Slot(6, n)
 }
 
 func PlayerHelloStart(builder *flatbuffers.Builder) {
-	builder.StartObject(1)
+	builder.StartObject(2)
+}
+func PlayerHelloAddKind(builder *flatbuffers.Builder, kind EventKind) {
+	builder.PrependByteSlot(0, byte(kind), 0)
 }
 func PlayerHelloAddId(builder *flatbuffers.Builder, id int32) {
-	builder.PrependInt32Slot(0, id, 0)
+	builder.PrependInt32Slot(1, id, 0)
 }
 func PlayerHelloEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()

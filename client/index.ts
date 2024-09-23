@@ -31,10 +31,10 @@ interface Player {
     MovingDown: boolean,
 }
 
-function rawBlobToFlatEvent(rawEventBlob) {
+function rawBlobToKindHolder(rawEventBlob) {
     var array = new Uint8Array(rawEventBlob)
     var buf = new flatbuffers.ByteBuffer(array);
-    return Game.Event.getRootAsEvent(buf);
+    return Game.KindHolder.getRootAsKindHolder(buf);
 }
 
 function rawBlobToFlatEventList(rawEventBlob) {
@@ -45,7 +45,8 @@ function rawBlobToFlatEventList(rawEventBlob) {
     return Game.EventList.getRootAsEventList(buf);
 }
 
-function getFlatPlayerHello(array: Uint8Array) {
+function getFlatPlayerHello(rawEventBlob) {
+    var array = new Uint8Array(rawEventBlob)
     let eventDataBuf = new flatbuffers.ByteBuffer(array);
     return Game.PlayerHello.getRootAsPlayerHello(eventDataBuf);
 }
@@ -100,24 +101,17 @@ let lastMessageSize = 0;
     conn.addEventListener("message", (event) => {
         if (myID === undefined) {
             event.data.arrayBuffer().then((rawEventBlob) => {
-                let flatEvent = rawBlobToFlatEvent(rawEventBlob)
-                let playerHello = getFlatPlayerHello(flatEvent.dataArray())
+                let playerHello = getFlatPlayerHello(rawEventBlob)
 
                 myID = playerHello.id()
                 console.log("We got hello!", `Our id = "${myID}"`)
                 
                 let builder = new flatbuffers.Builder(256)
-                let helloResponse = Game.PlayerHelloConfirm.createPlayerHelloConfirm(builder, myID)
+                let helloResponse = Game.PlayerHelloConfirm.createPlayerHelloConfirm(builder, Game.EventKind.PlayerHelloConfirm , myID)
                 builder.finish(helloResponse)
                 let eventData = builder.asUint8Array()
 
-                let flatEventData = builder.createByteVector(eventData)
-                let kind = Game.EventKind.PlayerHelloConfirm
-                let eventResponse = Game.Event.createEvent(builder, kind, flatEventData)
-                builder.finish(eventResponse)
-                let responseBytes = builder.asUint8Array()
-
-                conn.send(responseBytes)
+                conn.send(eventData)
             })
         }  else {
             event.data.arrayBuffer().then((rawEventBlob) => {
@@ -127,11 +121,11 @@ let lastMessageSize = 0;
 
                 for (let i = 0; i < flatEventList.eventsLength(); i++) {
                     let rawFlatEvent = flatEventList.events(i)
-                    let flatEvent = rawBlobToFlatEvent(rawFlatEvent.rawDataArray())
+                    let flatEvent = rawBlobToKindHolder(rawFlatEvent.rawDataArray())
                     
                     switch (flatEvent.kind()) {
                         case Game.EventKind.PlayerJoined:
-                            let playerJoined = getFlatPlayerJoined(flatEvent.dataArray())
+                            let playerJoined = getFlatPlayerJoined(rawFlatEvent.rawDataArray())
         
                             // console.log("New Player Joined", `His id = "${playerJoined.player().id()}"`)
                             
@@ -147,7 +141,7 @@ let lastMessageSize = 0;
                             }
                             break
                         case Game.EventKind.PlayerJoinedList:
-                            let playerJoinedList = getFlatPlayerJoinedList(flatEvent.dataArray())
+                            let playerJoinedList = getFlatPlayerJoinedList(rawFlatEvent.rawDataArray())
 
                             for (let i = 0; i < playerJoinedList.playersLength(); i ++) {
                                 let playerJoined = playerJoinedList.players(i)
@@ -167,13 +161,13 @@ let lastMessageSize = 0;
                             }
                             break
                         case Game.EventKind.PlayerQuit:
-                            let playerQuit = getFlatPlayerQuit(flatEvent.dataArray())
+                            let playerQuit = getFlatPlayerQuit(rawFlatEvent.rawDataArray())
     
                             delete Players[playerQuit.id()]
                             console.log("New Player Quit", `His id = "${playerQuit.id()}"`)
                             break
                         case Game.EventKind.PlayerMovedList:
-                            const playerMovedList = getFlatPlayerMovedList(flatEvent.dataArray())
+                            const playerMovedList = getFlatPlayerMovedList(rawFlatEvent.rawDataArray())
                             // console.log(`Player Moved Count = ${playerMovedList.playersLength()}`)
                             for (let i = 0; i < playerMovedList.playersLength(); i++) {
                                 const playerMoved = playerMovedList.players(i) 
@@ -256,18 +250,15 @@ let lastMessageSize = 0;
             let flatPlayer = Game.Player.createPlayer(builder, myID, player.X, player.Y,
                 player.Speed, player.MovingLeft, player.MovingRight, player.MovingUp, player.MovingDown
             )
-            let playerMoved = Game.PlayerMoved.createPlayerMoved(builder, flatPlayer)
+
+            Game.PlayerMoved.startPlayerMoved(builder)
+            Game.PlayerMoved.addPlayer(builder, flatPlayer)
+            Game.PlayerMoved.addKind(builder, Game.EventKind.PlayerMoved)
+            let playerMoved = Game.PlayerMoved.endPlayerMoved(builder)
             builder.finish(playerMoved)
             let playerMovedBytes = builder.asUint8Array()
 
-            let kind = Game.EventKind.PlayerMoved
-            let data = builder.createByteVector(playerMovedBytes)
-
-            let eventResponse = Game.Event.createEvent(builder, kind, data)
-            builder.finish(eventResponse)
-            let responseBytes = builder.asUint8Array()
-
-            conn.send(responseBytes)
+            conn.send(playerMovedBytes)
         }
     })
 
@@ -286,18 +277,16 @@ let lastMessageSize = 0;
             let flatPlayer = Game.Player.createPlayer(builder, myID, player.X, player.Y,
                 player.Speed, player.MovingLeft, player.MovingRight, player.MovingUp, player.MovingDown
             )
-            let playerMoved = Game.PlayerMoved.createPlayerMoved(builder, flatPlayer)
+
+            Game.PlayerMoved.startPlayerMoved(builder)
+            Game.PlayerMoved.addPlayer(builder, flatPlayer)
+            Game.PlayerMoved.addKind(builder, Game.EventKind.PlayerMoved)
+            let playerMoved = Game.PlayerMoved.endPlayerMoved(builder)
+
             builder.finish(playerMoved)
             let playerMovedBytes = builder.asUint8Array()
 
-            let kind = Game.EventKind.PlayerMoved
-            let data = builder.createByteVector(playerMovedBytes)
-
-            let eventResponse = Game.Event.createEvent(builder, kind, data)
-            builder.finish(eventResponse)
-            let responseBytes = builder.asUint8Array()
-
-            conn.send(responseBytes)
+            conn.send(playerMovedBytes)
         }
     })
 

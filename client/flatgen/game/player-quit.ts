@@ -4,6 +4,9 @@
 
 import * as flatbuffers from '../../flatbuffers/flatbuffers.js';
 
+import { EventKind } from '../../flatgen/game/event-kind.js';
+
+
 export class PlayerQuit {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
@@ -22,17 +25,26 @@ static getSizePrefixedRootAsPlayerQuit(bb:flatbuffers.ByteBuffer, obj?:PlayerQui
   return (obj || new PlayerQuit()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
-id():number {
+kind():EventKind {
   const offset = this.bb!.__offset(this.bb_pos, 4);
+  return offset ? this.bb!.readUint8(this.bb_pos + offset) : EventKind.NilEvent;
+}
+
+id():number {
+  const offset = this.bb!.__offset(this.bb_pos, 6);
   return offset ? this.bb!.readInt32(this.bb_pos + offset) : 0;
 }
 
 static startPlayerQuit(builder:flatbuffers.Builder) {
-  builder.startObject(1);
+  builder.startObject(2);
+}
+
+static addKind(builder:flatbuffers.Builder, kind:EventKind) {
+  builder.addFieldInt8(0, kind, EventKind.NilEvent);
 }
 
 static addId(builder:flatbuffers.Builder, id:number) {
-  builder.addFieldInt32(0, id, 0);
+  builder.addFieldInt32(1, id, 0);
 }
 
 static endPlayerQuit(builder:flatbuffers.Builder):flatbuffers.Offset {
@@ -40,8 +52,9 @@ static endPlayerQuit(builder:flatbuffers.Builder):flatbuffers.Offset {
   return offset;
 }
 
-static createPlayerQuit(builder:flatbuffers.Builder, id:number):flatbuffers.Offset {
+static createPlayerQuit(builder:flatbuffers.Builder, kind:EventKind, id:number):flatbuffers.Offset {
   PlayerQuit.startPlayerQuit(builder);
+  PlayerQuit.addKind(builder, kind);
   PlayerQuit.addId(builder, id);
   return PlayerQuit.endPlayerQuit(builder);
 }

@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"test/pkg/types"
 	flatgen "test/pkg/types/flatgen/game"
 
 	flatbuffers "github.com/google/flatbuffers/go"
@@ -9,11 +10,11 @@ import (
 
 type EventListBuilder struct {
 	builder        *flatbuffers.Builder
-	events         []*flatgen.Event
+	events         []types.EventHolder
 	builderStarted bool
 }
 
-func (elb *EventListBuilder) AddEvent(event *flatgen.Event) error {
+func (elb *EventListBuilder) AddRawEvent(event types.EventHolder) error {
 	if elb.builderStarted {
 		return fmt.Errorf("another build is already started, need to reset first")
 	}
@@ -22,7 +23,7 @@ func (elb *EventListBuilder) AddEvent(event *flatgen.Event) error {
 	return nil
 }
 
-func (elb *EventListBuilder) GetFlatEventList(generalEvents []*flatgen.Event) (*flatgen.EventList, int) {
+func (elb *EventListBuilder) GetFlatEventList(generalEvents []types.EventHolder) (*flatgen.EventList, int) {
 	totalEventCount := len(elb.events) + len(generalEvents)
 	if totalEventCount == 0 {
 		return nil, 0
@@ -32,7 +33,7 @@ func (elb *EventListBuilder) GetFlatEventList(generalEvents []*flatgen.Event) (*
 
 	rawEventList := make([]flatbuffers.UOffsetT, totalEventCount)
 	for i := 0; i < len(elb.events); i++ {
-		rawDataOffset := elb.builder.CreateByteVector(elb.events[i].Table().Bytes)
+		rawDataOffset := elb.builder.CreateByteVector(elb.events[i].Bytes())
 
 		flatgen.RawEventStart(elb.builder)
 		flatgen.RawEventAddRawData(elb.builder, rawDataOffset)
@@ -41,7 +42,7 @@ func (elb *EventListBuilder) GetFlatEventList(generalEvents []*flatgen.Event) (*
 
 	for i := len(elb.events); i < totalEventCount; i++ {
 		j := i - len(elb.events)
-		rawDataOffset := elb.builder.CreateByteVector(generalEvents[j].Table().Bytes)
+		rawDataOffset := elb.builder.CreateByteVector(generalEvents[j].Bytes())
 
 		flatgen.RawEventStart(elb.builder)
 		flatgen.RawEventAddRawData(elb.builder, rawDataOffset)
@@ -64,7 +65,7 @@ func (elb *EventListBuilder) GetFlatEventList(generalEvents []*flatgen.Event) (*
 
 type EventCollector struct {
 	playerEvents  map[int]EventListBuilder
-	generalEvents []*flatgen.Event
+	generalEvents []types.EventHolder
 }
 
 func NewEventCollector() *EventCollector {
@@ -73,7 +74,11 @@ func NewEventCollector() *EventCollector {
 	}
 }
 
-func (es *EventCollector) AddEvent(playerId int, event *flatgen.Event) {
+func (es *EventCollector) AddEvent(playerId int, event types.EventHolder) {
+	if event.Kind() == flatgen.EventKindNilEvent {
+		return
+	}
+
 	playerEventsBuilder, ok := es.playerEvents[playerId]
 	if !ok {
 		playerEventsBuilder = EventListBuilder{
@@ -81,11 +86,11 @@ func (es *EventCollector) AddEvent(playerId int, event *flatgen.Event) {
 		}
 	}
 
-	playerEventsBuilder.AddEvent(event)
+	playerEventsBuilder.AddRawEvent(event)
 	es.playerEvents[playerId] = playerEventsBuilder
 }
 
-func (es *EventCollector) AddGeneralEvent(event *flatgen.Event) {
+func (es *EventCollector) AddGeneralEvent(event types.EventHolder) {
 	es.generalEvents = append(es.generalEvents, event)
 }
 
