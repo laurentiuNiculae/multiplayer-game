@@ -8,7 +8,6 @@ import (
 	"os"
 	"runtime"
 	"slices"
-	"sort"
 	"time"
 
 	"test/pkg/log"
@@ -42,6 +41,7 @@ type GameServer struct {
 	EventQueue     chan Event
 	IdGenerator    IdGenerator
 	EventCollector *EventCollector
+	StatCollector  StatCollector
 	mux            *http.ServeMux
 	log            log.MeloLog
 }
@@ -52,6 +52,7 @@ func NewGame() GameServer {
 		EventQueue:     make(chan Event, 2000),
 		IdGenerator:    IdGenerator{},
 		EventCollector: NewEventCollector(),
+		StatCollector:  NewStatCollector(ServerFPS),
 		mux:            http.NewServeMux(),
 		log:            log.New(os.Stdout),
 	}
@@ -141,33 +142,22 @@ func bToMb(b uint64) uint64 {
 func (game *GameServer) Tick() {
 	utils.WaitServerIsReady(HttpAddress)
 
-	tickTimeArr := make([]float64, 30)
-	timeI := 0
-
 	ticker := time.NewTicker(1 * time.Second / time.Duration(ServerFPS))
 	previousTime, delta := time.Now(), time.Duration(0)
 
 	playerMovedBuilder := flatbuffers.NewBuilder(512)
 	playerMovedList := []*flatgen.PlayerMoved{}
 
-	playerJoinedBuilder := flatbuffers.NewBuilder(512)
 	playerJoinedBuilder2 := flatbuffers.NewBuilder(512)
 	playerJoinedList := []Player{}
 
 	<-ticker.C
 
-	avgEventsPerTick := float64(0)
-	avgDataSentPerPlayer := float64(0)
-	totalEventsSentAvg := float64(0)
-	totalEventsSentPerTick := float64(0)
-	maxDataSent := float64(0)
-	sendCount := float64(0)
-
 	for range ticker.C {
 		startTick := time.Now()
 		ctx := context.Background()
 
-		eventsPerTick := float64(len(game.EventQueue))
+		game.StatCollector.Tick().AddEventsReceived(len(game.EventQueue))
 
 		for range len(game.EventQueue) {
 			event := <-game.EventQueue
@@ -223,7 +213,6 @@ func (game *GameServer) Tick() {
 
 					flatOtherPlayerJoined := utils.NewFlatPlayerJoined(builder2, otherPlayer.Player).Table().Bytes
 					flatOtherPlayerJoinedEvent := utils.NewEventHolder(flatgen.EventKindPlayerJoined, flatOtherPlayerJoined)
-					// flatOtherPlayerJoinedEvent := utils.NewFlatEvent(builder2, flatgen.EventKindPlayerJoined, flatOtherPlayerJoined)
 					if otherPlayer.Id != newPlayer.Id {
 						game.EventCollector.AddEvent(newPlayer.Id, flatOtherPlayerJoinedEvent)
 					}
@@ -264,15 +253,7 @@ func (game *GameServer) Tick() {
 				playerMoved.Player(nil).MutateY(int32(player.Y))
 
 				game.Players.Set(int(newPlayerInfo.Id()), player)
-
-				// playerMovedEvent := utils.GetFlatEvent(flatbuffers.NewBuilder(512), PlayerMovedKind,
-				// 	playerMoved.Table().Bytes)
-
 				playerMovedList = append(playerMovedList, playerMoved)
-
-				// for _, player := range game.Players.All() {
-				// 	game.EventCollector.AddEvent(player.Id, playerMovedEvent)
-				// }
 			}
 		}
 
@@ -288,20 +269,18 @@ func (game *GameServer) Tick() {
 			game.EventCollector.AddGeneralEvent(utils.NewEventHolder(flatgen.EventKindPlayerJoinedList, flatPlayerJoinedList))
 		}
 
-		i := float64(0)
-
 		// collect events here then send them.
 		for id, player := range game.Players.All() {
 			eventList, _ := game.EventCollector.GetPlayerEventList(id)
 
 			if eventList != nil {
-				i++
-				sendCount++
-				avgDataSentPerPlayer += float64(len(eventList.Table().Bytes))
-				maxDataSent = max(maxDataSent, float64(len(eventList.Table().Bytes)))
+				game.StatCollector.Tick().AddEventsSent(1)
+				game.StatCollector.Tick().AddMessageSize(len(eventList.Table().Bytes))
+
 				writeTo(ctx, player, eventList.Table().Bytes)
-				// player.Conn.Write(ctx, websocket.MessageBinary, eventList.Table().Bytes)
 			}
+
+			game.StatCollector.Tick().AddActivePlayers(1)
 		}
 
 		// TODO: Something to manage state, buffers and stuff like that.
@@ -312,7 +291,6 @@ func (game *GameServer) Tick() {
 		playerMovedBuilder.Reset()
 
 		playerJoinedList = playerJoinedList[:0]
-		playerJoinedBuilder.Reset()
 		playerJoinedBuilder2.Reset()
 
 		delta, previousTime = time.Since(previousTime), time.Now()
@@ -337,27 +315,19 @@ func (game *GameServer) Tick() {
 			game.Players.Set(i, player)
 		}
 
-		// TODO: Some sort of observability thing to print every X ticks
-		if timeI == ServerFPS-1 {
-			sort.Slice(tickTimeArr, func(i, j int) bool {
-				return tickTimeArr[i] < tickTimeArr[j]
-			})
+		game.StatCollector.Tick().AddTime(time.Since(startTick).Seconds())
+		game.StatCollector.FinishTick()
 
-			game.log.Debugf("Tick: %06f  Avg-Events: %02f avgDataSentPerPlayerPerTick: %f KB", tickTimeArr[30/2], avgEventsPerTick, avgDataSentPerPlayer/sendCount/1024)
+		if stats := game.StatCollector.AvgStatsIfReady(); stats != nil {
+			game.log.Debugf("Tick: %06f  Avg-Events: %.3f AvgDataSentPerPlayer: %.3f KB XD: %.0f",
+				stats.AvgTickProcessingTime,
+				stats.AvgEventsRecvPerTick,
+				stats.AvgDataSentPerPlayer/1024,
+				stats.MaxMessageSize/1024,
+			)
 			PrintMemUsage(game.log)
-
-			timeI = 0
-			avgEventsPerTick = 0
-			totalEventsSentPerTick = 0
-			totalEventsSentAvg = 0
-			avgDataSentPerPlayer = 0
-			sendCount = 0
+			game.StatCollector.ResetFrame()
 		}
-
-		tickTimeArr[timeI] = time.Since(startTick).Seconds()
-		avgEventsPerTick += eventsPerTick / float64(ServerFPS)
-		totalEventsSentAvg += totalEventsSentPerTick / float64(ServerFPS)
-		timeI++
 	}
 }
 
