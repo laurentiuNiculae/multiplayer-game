@@ -41,7 +41,8 @@ type GameServer struct {
 	EventQueue     chan Event
 	IdGenerator    IdGenerator
 	EventCollector *EventCollector
-	StatCollector  StatCollector
+	StatCollector  *StatCollector
+	FlatCache      *FlatCache
 	mux            *http.ServeMux
 	log            log.MeloLog
 }
@@ -53,6 +54,7 @@ func NewGame() GameServer {
 		IdGenerator:    IdGenerator{},
 		EventCollector: NewEventCollector(),
 		StatCollector:  NewStatCollector(ServerFPS),
+		FlatCache:      NewFlatCache(),
 		mux:            http.NewServeMux(),
 		log:            log.New(os.Stdout),
 	}
@@ -80,7 +82,7 @@ func (game *GameServer) Start(ctx context.Context) {
 				Data:     flatgen.GetRootAsPlayerQuit(utils.NewFlatPlayerQuit(builder, playerId).Table().Bytes, 0),
 			}
 
-			game.log.Infof("Player '%v' diconnected", playerId)
+			// game.log.Infof("Player '%v' diconnected", playerId)
 		}()
 
 		game.EventQueue <- Event{
@@ -128,17 +130,6 @@ func (game *GameServer) Start(ctx context.Context) {
 	<-ctx.Done()
 }
 
-func PrintMemUsage(log log.MeloLog) {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	// For info on each, see: https://golang.org/pkg/runtime/#MemStats
-	log.Debugf("Alloc = %v MiB\n\tTotalAlloc = %v MiB\n\tSys = %v MiB\n", bToMb(m.Alloc), bToMb(m.TotalAlloc), bToMb(m.Sys))
-}
-
-func bToMb(b uint64) uint64 {
-	return b / 1024 / 1024
-}
-
 func (game *GameServer) Tick() {
 	utils.WaitServerIsReady(HttpAddress)
 
@@ -182,7 +173,7 @@ func (game *GameServer) Tick() {
 
 				game.Players.Set(newPlayer.Id, newPlayer)
 
-				game.log.Infof("Player connected: '%v'", playerHello.Id)
+				// game.log.Infof("Player connected: '%v'", playerHello.Id)
 
 				eventData := utils.NewFlatPlayerHello(bufferPool.GetFreeBuilder(), newPlayer.Player).Table().Bytes
 
@@ -193,10 +184,9 @@ func (game *GameServer) Tick() {
 			case flatgen.EventKindPlayerHelloConfirm:
 				helloResponse := event.Data.(*flatgen.PlayerHelloConfirm)
 
-				if helloResponse.Id() == int32(event.PlayerId) {
-					game.log.Debug("HELLO CONFIRMED BY PLAYER")
-				} else {
+				if helloResponse.Id() != int32(event.PlayerId) {
 					game.log.Debugf("player ID doesn't match expected:'%d', given:'%d'", event.PlayerId, helloResponse.Id())
+					event.Conn.CloseNow()
 				}
 
 				newPlayer, _ := game.Players.Get(event.PlayerId)
@@ -206,10 +196,9 @@ func (game *GameServer) Tick() {
 				playerJoinedList = append(playerJoinedList, newPlayer.Player)
 
 				for _, otherPlayer := range game.Players.All() {
-					builder2 := flatbuffers.NewBuilder(512)
+					otherPlayerJoined := game.FlatCache.GetMutatedPlayerJoined(otherPlayer.Id, otherPlayer.Player)
 
-					flatOtherPlayerJoined := utils.NewFlatPlayerJoined(builder2, otherPlayer.Player).Table().Bytes
-					flatOtherPlayerJoinedEvent := utils.NewEventHolder(flatgen.EventKindPlayerJoined, flatOtherPlayerJoined)
+					flatOtherPlayerJoinedEvent := utils.NewEventHolder(flatgen.EventKindPlayerJoined, otherPlayerJoined)
 					if otherPlayer.Id != newPlayer.Id {
 						game.EventCollector.AddEvent(newPlayer.Id, flatOtherPlayerJoinedEvent)
 					}
@@ -226,11 +215,11 @@ func (game *GameServer) Tick() {
 
 				game.Players.Delete(event.PlayerId)
 				game.EventCollector.RemovePlayer(event.PlayerId)
+				game.FlatCache.RemoveJoin(event.PlayerId)
 
 				for _, player := range game.Players.All() {
 					game.EventCollector.AddEvent(player.Id, playerQuitEvent)
 				}
-
 			case flatgen.EventKindPlayerMoved:
 				playerMoved := event.Data.(*flatgen.PlayerMoved)
 				newPlayerInfo := playerMoved.Player(nil)
@@ -274,7 +263,10 @@ func (game *GameServer) Tick() {
 				game.StatCollector.Tick().AddEventsSent(1)
 				game.StatCollector.Tick().AddMessageSize(len(eventList.Table().Bytes))
 
-				writeTo(ctx, player, eventList.Table().Bytes)
+				err := writeTo(ctx, player, eventList.Table().Bytes)
+				if err != nil {
+					game.log.Error(err.Error())
+				}
 			}
 
 			game.StatCollector.Tick().AddActivePlayers(1)
@@ -315,11 +307,10 @@ func (game *GameServer) Tick() {
 		game.StatCollector.FinishTick()
 
 		if stats := game.StatCollector.AvgStatsIfReady(); stats != nil {
-			game.log.Debugf("Tick: %06f  Avg-Events: %.3f AvgDataSentPerPlayer: %.3f KB XD: %.0f",
+			game.log.Debugf("Tick: %06f  Avg-Events: %.3f AvgDataSentPerPlayer: %.3f KB",
 				stats.AvgTickProcessingTime,
 				stats.AvgEventsRecvPerTick,
 				stats.AvgDataSentPerPlayer/1024,
-				stats.MaxMessageSize/1024,
 			)
 			PrintMemUsage(game.log)
 			game.StatCollector.ResetFrame()
@@ -327,14 +318,14 @@ func (game *GameServer) Tick() {
 	}
 }
 
-func writeTo(ctx context.Context, player PlayerWithSocket, b []byte) {
+func writeTo(ctx context.Context, player PlayerWithSocket, b []byte) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			return
+			err = fmt.Errorf("lost connection with player '%v'", player.Id)
 		}
 	}()
 
-	player.Conn.Write(ctx, websocket.MessageBinary, b)
+	return player.Conn.Write(ctx, websocket.MessageBinary, b)
 }
 
 func (game *GameServer) NotifyAll(msg []byte) {
@@ -355,4 +346,15 @@ func (game *GameServer) NotifyAllElse(msg []byte, except ...int) {
 			}
 		}
 	}
+}
+
+func PrintMemUsage(log log.MeloLog) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	// For info on each, see: https://golang.org/pkg/runtime/#MemStats
+	log.Debugf("Alloc = %v MiB\n\tTotalAlloc = %v MiB\n\tSys = %v MiB\n", bToMb(m.Alloc), bToMb(m.TotalAlloc), bToMb(m.Sys))
+}
+
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
 }

@@ -9,8 +9,8 @@ type StatCollector struct {
 	collectionFrame int
 }
 
-func NewStatCollector(collectionFrame int) StatCollector {
-	return StatCollector{
+func NewStatCollector(collectionFrame int) *StatCollector {
+	return &StatCollector{
 		tickBuilder:     &TickStatBuilder{},
 		tickStatList:    make([]TickStats, collectionFrame),
 		tickIndex:       0,
