@@ -145,10 +145,9 @@ func (game *GameServer) Tick() {
 	ticker := time.NewTicker(1 * time.Second / time.Duration(ServerFPS))
 	previousTime, delta := time.Now(), time.Duration(0)
 
-	playerMovedBuilder := flatbuffers.NewBuilder(512)
-	playerMovedList := []*flatgen.PlayerMoved{}
+	bufferPool := NewBuilderPool(512, 4)
 
-	playerJoinedBuilder2 := flatbuffers.NewBuilder(512)
+	playerMovedList := []*flatgen.PlayerMoved{}
 	playerJoinedList := []Player{}
 
 	<-ticker.C
@@ -185,9 +184,7 @@ func (game *GameServer) Tick() {
 
 				game.log.Infof("Player connected: '%v'", playerHello.Id)
 
-				builder := flatbuffers.NewBuilder(512)
-
-				eventData := utils.NewFlatPlayerHello(builder, newPlayer.Player).Table().Bytes
+				eventData := utils.NewFlatPlayerHello(bufferPool.GetFreeBuilder(), newPlayer.Player).Table().Bytes
 
 				err := newPlayer.Conn.Write(ctx, websocket.MessageBinary, eventData)
 				if err != nil {
@@ -260,12 +257,12 @@ func (game *GameServer) Tick() {
 		// TODO: move this into a EventCollector
 		// calculate all players that moved event and send it.
 		if len(playerMovedList) > 0 {
-			flatPlayerMovedList := utils.NewFlatPlayerMovedList(playerMovedBuilder, playerMovedList)
+			flatPlayerMovedList := utils.NewFlatPlayerMovedList(bufferPool.GetFreeBuilder(), playerMovedList)
 			game.EventCollector.AddGeneralEvent(utils.NewEventHolder(flatgen.EventKindPlayerMovedList, flatPlayerMovedList))
 		}
 
 		if len(playerJoinedList) > 0 {
-			flatPlayerJoinedList := utils.NewFlatPlayerJoinedList(playerJoinedBuilder2, playerJoinedList)
+			flatPlayerJoinedList := utils.NewFlatPlayerJoinedList(bufferPool.GetFreeBuilder(), playerJoinedList)
 			game.EventCollector.AddGeneralEvent(utils.NewEventHolder(flatgen.EventKindPlayerJoinedList, flatPlayerJoinedList))
 		}
 
@@ -288,10 +285,9 @@ func (game *GameServer) Tick() {
 		clear(playerMovedList)
 
 		playerMovedList = playerMovedList[:0]
-		playerMovedBuilder.Reset()
-
 		playerJoinedList = playerJoinedList[:0]
-		playerJoinedBuilder2.Reset()
+
+		bufferPool.Reset()
 
 		delta, previousTime = time.Since(previousTime), time.Now()
 
