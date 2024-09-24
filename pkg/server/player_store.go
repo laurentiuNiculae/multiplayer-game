@@ -4,7 +4,7 @@ import (
 	"iter"
 	"sync"
 
-	. "test/pkg/types"
+	. "github.com/laurentiuNiculae/multiplayer-game/pkg/types"
 )
 
 type PlayerStore interface {

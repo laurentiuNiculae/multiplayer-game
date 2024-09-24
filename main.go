@@ -6,7 +6,8 @@ import (
 	"os/signal"
 	"runtime/pprof"
 	"syscall"
-	"test/pkg/server"
+
+	"github.com/laurentiuNiculae/multiplayer-game/pkg/server"
 )
 
 func main() {

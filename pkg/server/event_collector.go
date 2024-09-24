@@ -2,8 +2,9 @@ package server
 
 import (
 	"fmt"
-	"test/pkg/types"
-	flatgen "test/pkg/types/flatgen/game"
+
+	"github.com/laurentiuNiculae/multiplayer-game/pkg/types"
+	flatgen "github.com/laurentiuNiculae/multiplayer-game/pkg/types/flatgen/game"
 
 	flatbuffers "github.com/google/flatbuffers/go"
 )

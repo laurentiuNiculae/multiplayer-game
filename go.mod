@@ -1,4 +1,4 @@
-module test
+module "github.com/laurentiuNiculae/multiplayer-game"
 
 go 1.23.0
 

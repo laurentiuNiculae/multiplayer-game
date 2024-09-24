@@ -1,7 +1,7 @@
 package types
 
 import (
-	flatgen "test/pkg/types/flatgen/game"
+	flatgen "github.com/laurentiuNiculae/multiplayer-game/pkg/types/flatgen/game"
 
 	"github.com/coder/websocket"
 	flatbuffers "github.com/google/flatbuffers/go"

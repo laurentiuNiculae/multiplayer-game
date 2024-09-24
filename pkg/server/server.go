@@ -10,10 +10,10 @@ import (
 	"slices"
 	"time"
 
-	"test/pkg/log"
-	. "test/pkg/types"
-	flatgen "test/pkg/types/flatgen/game"
-	"test/pkg/types/utils"
+	"github.com/laurentiuNiculae/multiplayer-game/pkg/log"
+	. "github.com/laurentiuNiculae/multiplayer-game/pkg/types"
+	flatgen "github.com/laurentiuNiculae/multiplayer-game/pkg/types/flatgen/game"
+	"github.com/laurentiuNiculae/multiplayer-game/pkg/types/utils"
 
 	"github.com/coder/websocket"
 	flatbuffers "github.com/google/flatbuffers/go"

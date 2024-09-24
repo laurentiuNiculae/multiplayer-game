@@ -6,11 +6,12 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	. "test/pkg/types"
-	"test/pkg/types/utils"
 	"time"
 
-	flatgen "test/pkg/types/flatgen/game"
+	. "github.com/laurentiuNiculae/multiplayer-game/pkg/types"
+	"github.com/laurentiuNiculae/multiplayer-game/pkg/types/utils"
+
+	flatgen "github.com/laurentiuNiculae/multiplayer-game/pkg/types/flatgen/game"
 
 	"github.com/coder/websocket"
 	flatbuffers "github.com/google/flatbuffers/go"

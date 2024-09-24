@@ -1,13 +1,14 @@
-package server_test
+package server
 
 import (
 	"fmt"
-	"test/pkg/server"
-	"test/pkg/types"
-	"test/pkg/types/utils"
 	"testing"
 
-	flatgen "test/pkg/types/flatgen/game"
+	"github.com/laurentiuNiculae/multiplayer-game/pkg/server"
+	"github.com/laurentiuNiculae/multiplayer-game/pkg/types"
+	"github.com/laurentiuNiculae/multiplayer-game/pkg/types/utils"
+
+	flatgen "github.com/laurentiuNiculae/multiplayer-game/pkg/types/flatgen/game"
 
 	flatbuffers "github.com/google/flatbuffers/go"
 )
